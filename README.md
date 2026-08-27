@@ -8,8 +8,11 @@ rootfs, the dropped capabilities, the egress allowlist — exists to make that o
 guarantee hold even after the agent itself is assumed compromised.
 
 Every hardening flag in `run.sh` was verified empirically, and `verify-hardening.sh`
-re-checks them. Findings that contradicted the original plan are recorded in
-`notes.md` rather than quietly fixed.
+re-checks them. Findings that contradicted the original plan were written down rather
+than quietly fixed — including the ones still unresolved. See
+[docs/findings.md](docs/findings.md), which is the most interesting document here:
+an existence check that never reads the file, a permission table nothing enforces,
+and a script that reported a week-old number without ever erroring.
 
 ## Architecture
 
@@ -89,8 +92,9 @@ memory and pid ceilings are in place.
 | `config/pi-coach` | Model wrapper the agent invokes instead of `pi` directly. |
 | `config/adc-marker.json` | **Not a credential.** Deliberately invalid JSON that only exists to satisfy pi's `fileExists` gate; anything that actually parses it fails loudly, which is the point. |
 | `learn/` | Standalone experiments — see below. |
-| `docs/` | Written explanations, including a walkthrough of the full call chain. |
-| `notes.md` | Chronological build log: what was tried, what the plan got wrong, what is still open. |
+| `docs/findings.md` | **Start here.** What the plan got wrong and what measuring it revealed. |
+| `docs/call-chain.md` | A map of the 11 steps between a keyless container and a Vertex call. |
+| `notes.md` | The raw chronological build log, in Chinese. `docs/findings.md` is the readable distillation of it. |
 
 ## Experiments
 
