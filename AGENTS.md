@@ -36,6 +36,68 @@ running things, not by reading diffs:
   and after. A textual diff can look benign while changing behaviour — adjacent
   quotes in shell concatenate into a single argument, for instance.
 
+## Git workflow
+
+**Never commit directly to `main`.** Every piece of work starts on a branch, even
+a one-line fix, and reaches `main` through a pull request.
+
+There are two reasons beyond habit. Parallel sessions do touch this repo at the
+same time, and uncommitted work from one has already collided with another. And
+`main` is what someone cloning this repo runs; a half-finished experiment does
+not belong there.
+
+### Branch names
+
+`<type>/<short-kebab-description>`, where type is one of:
+
+| Type | For |
+|---|---|
+| `feat/` | new capability — a script, a container, a broker endpoint |
+| `fix/` | something that is wrong, including silent wrongness |
+| `docs/` | README, `docs/`, comments, this file |
+| `exp/` | an experiment whose outcome is not yet known |
+| `chore/` | dependencies, ignore rules, renames with no behaviour change |
+
+### Commits
+
+One commit per coherent change; do not batch unrelated edits together. The
+message says **why**, not what — the diff already says what. State the reasoning
+that would not be recoverable from the code six months later: what was assumed,
+what turned out to be true, what was rejected and why.
+
+Look at `git log` before writing one. That style is the repo's convention, and it
+is deliberate.
+
+### Before opening a pull request
+
+`main` should stay runnable, so the branch has to be checked before it merges:
+
+- shell scripts pass `sh -n`, python files compile
+- `./verify-hardening.sh` if anything under `run.sh` or the images changed
+- the affected `learn/` script actually runs, and its output is what its own
+  header claims you should see
+- for anything a reader would clone, check it in a fresh clone. This working copy
+  has `vault/`, the built images and `~/.pi`; a reader has none of those, and
+  that difference has already hidden a real defect once
+
+Open it with `gh pr create`. The description carries the same reasoning as the
+commits, plus how to verify it. Do not merge your own PR without the repo owner
+looking at it — reviewing what an agent changed is the point of the gate.
+
+### Keeping the record current
+
+Findings are part of the deliverable, not a postscript:
+
+- something surprising discovered while building or debugging goes into
+  `notes.md` as it happens, with the date
+- once it is understood, it becomes an entry in `docs/findings.md` in the shape
+  the other entries use: what was assumed, what happened, what changed
+- a finding that changes how the system should be used belongs in `README.md`
+  too, under **Known gaps** if it is unresolved
+
+An open problem is written down rather than left out. The unresolved entries are
+the most credible part of this repo, not a blemish on it.
+
 ## Credentials
 
 No credential ever enters this repository or any image built from it. The
