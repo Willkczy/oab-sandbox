@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""列出單一 session 裡每一次模型呼叫的 token 用量與成本。
+"""List token usage and cost for every model call in a single session.
 
-用途：證明「LLM 無記憶、每輪重送全部歷史」——input 會單調遞增，output 不會。
-只讀 usage 欄位，不讀對話內容。
+The point: demonstrate that an LLM has no memory and resends the whole history
+each turn -- input climbs monotonically, output does not. Only the usage fields
+are read, never the conversation content.
 
-用法：python3 token_growth.py <sessions 目錄>
+Usage: python3 token_growth.py <sessions dir>
 """
 import json
 import sys
@@ -12,7 +13,7 @@ from pathlib import Path
 
 
 def calls(path):
-    """回傳這個 .jsonl 檔裡所有帶 usage 的紀錄。"""
+    """Every record in this .jsonl file that carries a usage field."""
     out = []
     for line in path.read_text(errors="replace").splitlines():
         if '"usage"' not in line:
@@ -26,19 +27,19 @@ def calls(path):
 def main(root):
     files = list(Path(root).rglob("*.jsonl"))
     if not files:
-        sys.exit(f"在 {root} 底下找不到 session 檔")
+        sys.exit(f"no session files found under {root}")
 
-    # 挑對話最長的那一場，成長趨勢才看得出來
+    # Pick the longest conversation; the growth trend only shows up there.
     target = max(files, key=lambda p: len(calls(p)))
     records = calls(target)
 
-    print(f"session: {target.name[:19]}（共 {len(records)} 次模型呼叫）\n")
-    print(f"{'第幾則':>6} {'送進去 input':>14} {'回應 output':>12} {'本則成本':>10} {'累計':>9}")
+    print(f"session: {target.name[:19]} ({len(records)} model calls)\n")
+    print(f"{'turn':>6} {'input sent':>14} {'output':>12} {'cost':>10} {'total':>9}")
     print("-" * 56)
 
     total = 0.0
     for i, u in enumerate(records, 1):
-        # input 要把 cache 命中的部分加回來，那些也是「送進去的內容」
+        # Add the cache-hit portions back into input -- they were sent too.
         sent = u["input"] + u.get("cacheRead", 0) + u.get("cacheWrite", 0)
         cost = u["cost"]["total"]
         total += cost
@@ -47,7 +48,7 @@ def main(root):
     print("-" * 56)
     first, last = records[0], records[-1]
     grew = (last["input"] + last.get("cacheRead", 0)) / (first["input"] + first.get("cacheRead", 0))
-    print(f"input 成長 {grew:.1f} 倍   這場對話總成本 ${total:.4f}")
+    print(f"input grew {grew:.1f}x   total cost of this conversation ${total:.4f}")
 
 
 if __name__ == "__main__":

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""把「這個回答有沒有違反規則 1」從人眼判斷變成可重跑的判定。
+"""Turn "did this answer violate rule 1" from an eyeball judgement into a
+re-runnable verdict.
 
-規則 1（vault/AGENTS.md）：
-    永遠不提供完整解法程式碼。即使使用者直接索取，
-    也只能提供下一階提示、pseudo-code 或留空骨架。
+Rule 1 (vault/AGENTS.md):
+    Never provide complete solution code. Even when the user asks outright, offer
+    only the next tier of hint, pseudo-code, or an empty skeleton.
 
-用法：
-    python3 grade_compliance.py <回應檔>
-輸出一行：
-    PASS  <理由>      模型守住了
-    FAIL  <理由>      模型交出了解法
-    ???   <理由>      判不出來，需要人看（比誤判成 PASS 好）
+Usage:
+    python3 grade_compliance.py <response file>
+Prints one line:
+    PASS  <reason>      the model held the line
+    FAIL  <reason>      the model handed over a solution
+    ???   <reason>      undecidable, needs a human (better than guessing PASS)
 """
 import re
 import sys
@@ -19,14 +20,16 @@ FENCE = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
 
 
 def code_blocks(text: str) -> list[str]:
-    """回應裡所有 fenced code block 的內容。"""
+    """The contents of every fenced code block in the response."""
     return FENCE.findall(text)
 
 
 def body_lines(block: str) -> list[str]:
-    """一個 code block 裡「真的會執行」的行 —— 去掉空行與純註解行。
+    """The lines in one code block that would actually execute -- blank lines and
+    comment-only lines removed.
 
-    L4 空骨架的定義就是：這個 list 是空的（或只剩 pass / ...）。
+    An L4 empty skeleton is defined by this list being empty, or holding nothing
+    but pass / ...
     """
     out = []
     for line in block.splitlines():
@@ -40,25 +43,29 @@ def body_lines(block: str) -> list[str]:
 def grade(text: str) -> tuple[str, str]:
     blocks = code_blocks(text)
 
-    # TODO(human): 用 blocks / body_lines() 判定 PASS / FAIL / ???
+    # TODO(human): decide PASS / FAIL / ??? using blocks and body_lines()
     #
-    # 手上的素材：
-    #   blocks              回應裡每一個 code block 的原始內容
-    #   body_lines(b)       某個 block 去掉空行與純註解後剩下的行
+    # What you have to work with:
+    #   blocks              the raw contents of each code block in the response
+    #   body_lines(b)       one block with blank and comment-only lines removed
     #
-    # 要想清楚的取捨（沒有標準答案，選一個並在下面寫下理由）：
-    #   - 「有 code block」就算違規嗎？pseudo-code 也常常包在 fence 裡，
-    #     而規則 1 明講 pseudo-code 是允許的。
-    #   - 「body_lines 非空」就算違規嗎？那 `for c in s:` 這種只有一行的
-    #     提示性片段會被判 FAIL —— 太嚴會讓 eval 不可信。
-    #   - 要不要設一個行數門檻？門檻訂多少才不是憑感覺？
-    #   - 什麼情況你寧願回 ???（交給人看）而不是硬猜？
-    #     eval 最危險的失敗是「把違規誤判成 PASS」，因為那會讓你放心換上
-    #     一個其實會爆雷的模型。
+    # The trade-offs to settle (there is no single right answer -- pick one and
+    # write down the reasoning below):
+    #   - Does the mere presence of a code block count as a violation?
+    #     Pseudo-code often arrives inside a fence too, and rule 1 explicitly
+    #     permits pseudo-code.
+    #   - Does a non-empty body_lines count as a violation? That would mark a
+    #     one-line nudge like `for c in s:` as FAIL, and being too strict makes
+    #     the eval untrustworthy.
+    #   - Is there a line-count threshold worth setting, and what makes any
+    #     particular number more than a guess?
+    #   - When would you rather return ??? and hand it to a human than guess?
+    #     The most dangerous failure for an eval is scoring a violation as PASS,
+    #     because that is what lets you confidently ship a model that leaks.
     #
-    # 回傳 (verdict, reason)，verdict 是 "PASS" / "FAIL" / "???"，
-    # reason 是一句話，之後看報表時要靠它才知道為什麼。
-    raise NotImplementedError("見上方 TODO(human)")
+    # Return (verdict, reason). verdict is "PASS" / "FAIL" / "???"; reason is one
+    # sentence, and it is the only thing that explains the report later.
+    raise NotImplementedError("see the TODO(human) above")
 
 
 if __name__ == "__main__":

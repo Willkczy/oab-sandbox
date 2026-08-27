@@ -1,13 +1,17 @@
 #!/bin/sh
-# 實驗：pi 的 --session-dir 真的會改變 session 檔的寫入位置嗎？
+# Experiment: does pi's --session-dir really change where session files land?
 #
-# 測什麼   : 給了 --session-dir 之後，.jsonl 落在哪、預設位置還會不會有新檔
-# 預期看到 : 檔案出現在指定目錄，~/.pi/agent/sessions 沒有新增
-# 為什麼重要: 這是「把 session 搬到 tmpfs 以降低誤讀成本」這個改動的前提假設
-# 成本     : 會真的呼叫一次 Vertex（約 $0.0001）
-# 前置     : oab-proxy 與 oab-broker 要在跑（./run.sh 或手動起）
-# 重跑     : ./learn/09-session-dir.sh [session 目錄]
-#            不給參數 = 用 /tmp/sessions
+# What it tests  : with --session-dir set, where the .jsonl ends up and whether
+#                  anything new still appears in the default location
+# What to expect : the file shows up in the given directory, and nothing new
+#                  arrives in ~/.pi/agent/sessions
+# Why it matters : this is the assumption the whole "move sessions to tmpfs to
+#                  make an accidental read cheap" change rests on
+# Cost           : makes one real Vertex call (about $0.0001)
+# Prerequisites  : oab-proxy and oab-broker must be running (./run.sh, or start
+#                  them by hand)
+# Re-run         : ./learn/09-session-dir.sh [session dir]
+#                  no argument means /tmp/sessions
 
 set -e
 cd "$(dirname "$0")/.."
@@ -27,21 +31,21 @@ docker run --rm --network oab-int \
     -e SESSION_DIR="$SESSION_DIR" \
     -v "$PWD/config/adc-marker.json:/home/node/.config/gcloud/application_default_credentials.json:ro" \
     --entrypoint sh oab-sandbox:pi -c '
-        echo "=== 呼叫 pi（--session-dir $SESSION_DIR）==="
+        echo "=== Calling pi (--session-dir $SESSION_DIR) ==="
         env -u HOME pi --model google-vertex/gemini-3.6-flash \
             --session-dir "$SESSION_DIR" \
-            -p "只回兩個字：收到" | sed "s/^/  模型回應: /"
+            -p "Reply with exactly one word: ack" | sed "s/^/  model said: /"
 
         echo
-        echo "=== 指定的目錄裡有什麼 ==="
-        find "$SESSION_DIR" -type f 2>/dev/null | sed "s/^/  /" || echo "  （目錄不存在）"
+        echo "=== What is in the directory we asked for ==="
+        find "$SESSION_DIR" -type f 2>/dev/null | sed "s/^/  /" || echo "  (directory does not exist)"
 
         echo
-        echo "=== 預設位置（~/.pi/agent/sessions）最近 2 分鐘有沒有新檔 ==="
+        echo "=== Anything new in the default location in the last 2 minutes? ==="
         found=$(find /home/node/.pi/agent/sessions -type f -newermt "-2 minutes" 2>/dev/null)
         if [ -z "$found" ]; then
-            echo "  （沒有新檔 ✅ 代表 --session-dir 生效）"
+            echo "  (nothing new -- --session-dir took effect)"
         else
-            echo "$found" | sed "s/^/  ⚠️ /"
+            echo "$found" | sed "s/^/  WARNING: /"
         fi
     '

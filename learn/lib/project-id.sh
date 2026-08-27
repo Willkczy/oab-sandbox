@@ -1,39 +1,46 @@
-# GCP 專案 ID 的單一來源。
+# The single source for the GCP project id.
 #
-# 為什麼需要這支：learn/ 底下有 3 支腳本要把 GOOGLE_CLOUD_PROJECT 傳給
-# docker，原本各自寫死同一個字串。而 config/config.toml 早就有這個值，
-# 且它已在 .gitignore 裡——真值不會進公開版控，這裡讀它就好。
+# Why this exists: three scripts under learn/ need to pass GOOGLE_CLOUD_PROJECT
+# to docker, and each used to hardcode the same string. config/config.toml
+# already holds that value and is gitignored, so the real id never reaches a
+# public repository -- reading it from there is enough.
 #
-# 用法：呼叫端已經 cd 到 repo 根目錄，所以直接
-#         . learn/lib/project-id.sh
-#       之後用 $GCP_PROJECT。
+# Usage: callers have already cd'd to the repo root, so just
+#          . learn/lib/project-id.sh
+#        and use $GCP_PROJECT afterwards.
 #
-# config.toml 裡的形式（單行 inline table，注意有空格）：
+# The shape it takes in config.toml (a single-line inline table, note the
+# spaces):
 #   env = { ..., GOOGLE_CLOUD_PROJECT = "your-gcp-project-id", ... }
 
 resolve_project_id() {
-    # 環境變數優先：臨時要在別的專案上跑時，export 一下就好，不用改檔案。
+    # The environment variable wins: to run against a different project for a
+    # moment, export it -- no need to edit any file.
     if [ -n "$GOOGLE_CLOUD_PROJECT" ]; then
         echo "$GOOGLE_CLOUD_PROJECT"
         return
     fi
 
-    # 否則從 config.toml 撈。那是單行 inline table，同一行還有
-    # GOOGLE_CLOUD_LOCATION 等其他 KEY = "value" 對，所以要連
-    # 等號與引號一起比對，只取第一個匹配的引號內容。
+    # Otherwise pull it out of config.toml. That is a single-line inline table
+    # sharing the line with GOOGLE_CLOUD_LOCATION and other KEY = "value" pairs,
+    # so the match has to include the equals sign and the quotes, and take only
+    # the first hit.
     id=$(sed -n 's/.*GOOGLE_CLOUD_PROJECT[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
          config/config.toml 2>/dev/null | head -1)
 
-    # 找不到就停下來。這些腳本每跑一次會真的呼叫 Vertex，
-    # 帶著空的專案 ID 只會換來一個看不懂的 API 錯誤。
+    # Stop if it is missing. Each of these scripts makes a real Vertex call, and
+    # an empty project id only ever surfaces as an unreadable API error.
     if [ -z "$id" ]; then
-        echo "找不到 GCP 專案 ID。" >&2
-        echo "  請確認 config/config.toml 存在（可從 config/config.toml.example 複製）," >&2
-        echo "  或直接 export GOOGLE_CLOUD_PROJECT=<你的專案 ID>" >&2
+        echo "GCP project id not found." >&2
+        echo "  Check that config/config.toml exists (copy config/config.toml.example)," >&2
+        echo "  or export GOOGLE_CLOUD_PROJECT=<your project id> directly" >&2
         return 1
     fi
 
     echo "$id"
 }
 
+# A bare assignment would not be enough: the function runs inside a $( ) subshell,
+# where its return cannot stop the caller. The assignment's own exit status has to
+# do that explicitly.
 GCP_PROJECT="$(resolve_project_id)" || exit 1

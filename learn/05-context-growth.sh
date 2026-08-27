@@ -1,27 +1,31 @@
 #!/bin/sh
-# 實驗：LLM 沒有記憶，每一輪都把整段歷史重送一次。
+# Experiment: an LLM has no memory, so every turn resends the entire history.
 #
-# 測什麼   : 真實對話裡 input token 與 output token 的走勢差異
-# 預期看到 : input 單調遞增（因為每次重送全部），output 沒有趨勢
-# 資料來源 : ~/.pi/agent/sessions/ 的實際紀錄（只讀 usage 欄位，不讀對話內容）
-# 重跑     : ./learn/05-context-growth.sh [sessions 目錄]
+# What it tests  : how input tokens and output tokens trend across a real
+#                  conversation
+# What to expect : input climbs monotonically, because everything is resent each
+#                  time; output shows no trend at all
+# Data source    : real records from ~/.pi/agent/sessions/ -- only the usage
+#                  fields are read, never the conversation content
+# Re-run         : ./learn/05-context-growth.sh [sessions dir]
 #
-# 想看別的 vault 的紀錄，就把目錄當參數傳進來。
+# Pass a directory as an argument to look at a different vault's records.
 
 set -e
 cd "$(dirname "$0")/.."
 
-# 不給參數時，自動挑 ~/.pi/agent/sessions/ 底下最近有活動的那個。
-# （原本這裡寫死作者的 vault 路徑，別人 clone 下來會直接撲空。）
+# With no argument, pick whichever directory under ~/.pi/agent/sessions/ was
+# active most recently. (This used to hardcode the author's own vault path,
+# which meant a fresh clone found nothing.)
 SESSIONS="${1:-$(ls -dt "$HOME"/.pi/agent/sessions/*/ 2>/dev/null | head -1)}"
 
-echo "=== 每輪送進模型的 token 量 ==="
+echo "=== Tokens sent to the model on each turn ==="
 python3 learn/lib/token_growth.py "$SESSIONS"
 
 echo
-echo "=== 常駐成本：每一輪都要重付的固定開銷 ==="
+echo "=== Standing cost: the fixed overhead re-paid on every single turn ==="
 for f in vault/AGENTS.md vault/教練規則/*.md; do
     chars=$(wc -m < "$f" | tr -d ' ')
-    printf "  %-34s %6s 字元  ≈ %5s tokens\n" "${f#vault/}" "$chars" "$((chars * 2 / 3))"
+    printf "  %-34s %6s chars  ~= %5s tokens\n" "${f#vault/}" "$chars" "$((chars * 2 / 3))"
 done
-echo "  （中文粗估 1 字 ≈ 0.67 token）"
+echo "  (rough estimate for Chinese: 1 character ~= 0.67 token)"

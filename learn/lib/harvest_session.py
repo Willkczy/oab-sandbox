@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""從 pi 的 session .jsonl 榨出「值得帶回去的那一小撮」。
+"""Extract the small useful fraction out of pi's session .jsonl files.
 
-為什麼需要這支：session 檔的價值密度極低（一個檔十幾 KB，八成是 toolResult
-的原始輸出）。AGENTS.md 那條「不要直接讀 .jsonl」的規則講的就是這件事。
-把整個檔貼給另一個模型，等於把 $0.18 的錯誤再犯一次。
+Why this exists: session files have a terrible value density -- tens of KB each,
+four fifths of it raw toolResult output. That is exactly what the "do not read
+.jsonl directly" rule in AGENTS.md is about. Pasting a whole file into another
+model just repeats the $0.18 mistake.
 
-所以這支在**舊機上**跑，只輸出兩種東西：
-  --mode skeleton   每輪一行：誰說話、多長、用了什麼工具、花多少。不含內容。
-  --mode probes     只挑出「assistant 回應裡有 code fence」的那幾輪，
-                    連同觸發它的 user 訊息一起帶出來 —— 這正是規則 1 的違規候選。
+So this runs on the other machine and emits only two things:
+  --mode skeleton   one line per turn: who spoke, how long, which tools, what it
+                    cost. No content.
+  --mode probes     only the turns where the assistant's reply contains a code
+                    fence, carried out together with the user message that
+                    triggered it -- these are the candidate violations of rule 1.
 
-用法（在舊機）：
+Usage (on the other machine):
     python3 harvest_session.py --days 7 --mode skeleton
     python3 harvest_session.py --days 7 --mode probes > probes.jsonl
 """
@@ -42,7 +45,7 @@ def tools_of(parts):
 
 
 def turns(path):
-    """把一個 session 檔攤平成 (idx, role, text, tools, usage) 的序列。"""
+    """Flatten one session file into a sequence of (idx, role, text, tools, usage)."""
     meta = {"file": path.name, "cwd": None, "model": None}
     out = []
     for i, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines()):
@@ -86,14 +89,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sessions", default=str(Path.home() / ".pi/agent/sessions"))
     ap.add_argument("--days", type=int, default=7)
-    ap.add_argument("--match", default="Leetcode", help="只看 cwd 目錄名含這個字串的 session")
+    ap.add_argument("--match", default="Leetcode", help="only sessions whose cwd directory name contains this string")
     ap.add_argument("--mode", choices=["skeleton", "probes"], default="skeleton")
-    ap.add_argument("--max-chars", type=int, default=1500, help="probes 模式下每段文字的截斷長度")
+    ap.add_argument("--max-chars", type=int, default=1500, help="in probes mode, truncate each passage to this many characters")
     a = ap.parse_args()
 
     root = Path(a.sessions)
     if not root.is_dir():
-        sys.exit(f"找不到 session 目錄：{root}")
+        sys.exit(f"session directory not found: {root}")
 
     n = 0
     for path in sessions(root, a.days, a.match):
@@ -124,7 +127,7 @@ def main():
                         "user": scrub(last_user)[:a.max_chars],
                         "assistant": scrub(t["text"])[:a.max_chars],
                     }, ensure_ascii=False))
-    print(f"\n（掃了 {n} 個 session）", file=sys.stderr)
+    print(f"\n(scanned {n} sessions)", file=sys.stderr)
 
 
 if __name__ == "__main__":

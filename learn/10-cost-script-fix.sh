@@ -1,13 +1,17 @@
 #!/bin/sh
-# 驗收：session 搬到 tmpfs 之後，pi_cost.py 還找得到正確的目錄嗎？
+# Acceptance check: after sessions moved to tmpfs, does pi_cost.py still find the
+# right directory?
 #
-# 測什麼   : resolve_sessions_dir() 在兩種情境下各選了哪個目錄
-#   情境 A : 沙箱裡（經 pi-coach 啟動）→ 應該用 /tmp/sessions
-#   情境 B : 沒有 PI_SESSION_DIR 也沒有 /tmp/sessions → 應該回退到 ~/.pi/agent/sessions
-# 預期看到 : 兩種情境都印出它實際掃描的目錄（不再靜默）
-# 成本     : 情境 A 會真的呼叫一次 Vertex（約 $0.0001）
-# 前置     : oab-proxy 與 oab-broker 要在跑
-# 重跑     : ./learn/10-cost-script-fix.sh
+# What it tests  : which directory resolve_sessions_dir() picks in two situations
+#   case A       : inside the sandbox, started through pi-coach -> should use
+#                  /tmp/sessions
+#   case B       : no PI_SESSION_DIR and no /tmp/sessions -> should fall back to
+#                  ~/.pi/agent/sessions
+# What to expect : both cases print the directory they actually scanned, instead
+#                  of staying silent about it
+# Cost           : case A makes one real Vertex call (about $0.0001)
+# Prerequisites  : oab-proxy and oab-broker must be running
+# Re-run         : ./learn/10-cost-script-fix.sh
 
 set -e
 cd "$(dirname "$0")/.."
@@ -29,22 +33,22 @@ run() {
         --entrypoint sh oab-sandbox:pi -c "$1"
 }
 
-echo "########## 情境 A：沙箱裡，經 pi-coach 啟動 ##########"
+echo "########## Case A: inside the sandbox, started through pi-coach ##########"
 run '
     cd /workspace
-    /home/node/bin/pi-coach -p "只回兩個字：驗收" | sed "s/^/  模型回應: /"
+    /home/node/bin/pi-coach -p "Reply with exactly one word: ok" | sed "s/^/  model said: /"
     echo
-    echo "  實際寫在 : $(ls /tmp/sessions/*.jsonl | tail -1)"
+    echo "  actually written to : $(ls /tmp/sessions/*.jsonl | tail -1)"
     echo "  --- pi_cost.py --current ---"
     PI_SESSION_DIR=/tmp/sessions python3 scripts/pi_cost.py --current | head -4 | sed "s/^/  /"
 '
 
 echo
-echo "########## 情境 B：主機模式（沒有 PI_SESSION_DIR，沒有 /tmp/sessions）##########"
+echo "########## Case B: host mode (no PI_SESSION_DIR, no /tmp/sessions) ##########"
 run '
     cd /workspace
-    echo "  PI_SESSION_DIR = ${PI_SESSION_DIR:-（未設定）}"
-    echo "  /tmp/sessions  = $([ -d /tmp/sessions ] && echo 存在 || echo 不存在)"
+    echo "  PI_SESSION_DIR = ${PI_SESSION_DIR:-(unset)}"
+    echo "  /tmp/sessions  = $([ -d /tmp/sessions ] && echo present || echo absent)"
     echo "  --- pi_cost.py --current ---"
     python3 scripts/pi_cost.py --current | head -3 | sed "s/^/  /"
 '
