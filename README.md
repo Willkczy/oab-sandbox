@@ -112,7 +112,15 @@ otherwise the value in `config/config.toml`, and a hard error if neither is pres
   *only* secret there" — is still open.
 - **`config/pi-coach` and `run.sh` assume the repo lives at `~/Projects/oab-sandbox`.**
 
-## A note on `vault/`
+## What the agent actually does — `vault/`
+
+The workspace mounted at `/workspace` is an Obsidian vault for algorithm practice, and
+the agent runs as a *coach* rather than a solver: its `AGENTS.md` forbids handing over a
+complete solution, allows only one tier of hint at a time, and requires that any review
+it writes be backed by something the user actually produced. The vault holds the problem
+bank, the coaching rules, pattern notes, and the python scripts the agent shells out to
+(`build_index.py` rebuilds the problem index, `pi_cost.py` reports spend) — which is why
+this repo's `Dockerfile` installs python3 that the base image lacks.
 
 `vault/` is a separate git repository with its own remote and its own history, and it is
 gitignored here on purpose rather than vendored as a submodule. To change it,

@@ -1,22 +1,26 @@
-# 沙箱用的薄層 image。刻意「只疊、不重建」——
-# 基底那層的 Rust binary 直接沿用，本機不編譯任何 Rust，
-# 磁碟與時間成本都留在 npm/apt 這一級。
+# A thin layer over the base image. It deliberately stacks rather than
+# rebuilds: the Rust binaries from the base are taken as-is, nothing Rust is
+# compiled locally, and the disk and time cost stays at the npm/apt level.
 FROM ghcr.io/openabdev/openab:stable-pi
 
 USER root
 
-# AGENTS.md 的任務路由要跑 scripts/build_index.py（重建題庫索引）
-# 與 scripts/pi_cost.py（查花費）。基底 image 沒有 python3，兩條路由會直接斷。
+# The task routing in the vault's AGENTS.md shells out to scripts/build_index.py,
+# which rebuilds the problem-bank index, and scripts/pi_cost.py, which reports
+# spend. The base image ships no python3, so both routes break outright without
+# this.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# 基底 image 釘 pi 0.79.9，其 @earendil-works/pi-ai 模型清單裡沒有
-# gemini-3.6-flash（最新的 flash 只到 3.5）。而 3.6-flash 是唯一
-# 「實測守得住教練規則且比 pro 便宜」的選項，所以要升版。
+# The base image pins pi 0.79.9, whose @earendil-works/pi-ai model list stops at
+# gemini-3.5-flash. 3.6-flash is the only model that both held the coaching rules
+# under test and came in cheaper than pro, so this bump is not optional.
 #
-# 升版風險已知為零：主力機實測過 pi 0.82.1 + pi-acp 0.0.31 的 ACP 握手正常
-# （211ms），不需要降版比對。pi-acp 維持基底的 0.0.31 不動。
+# The upgrade risk is known to be zero: pi 0.82.1 with pi-acp 0.0.31 was measured
+# on the main machine and the ACP handshake completes in 211ms, so there is
+# nothing a downgrade comparison would tell us. pi-acp itself stays at the base
+# image's 0.0.31.
 ARG PI_VERSION=0.82.1
 RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
 

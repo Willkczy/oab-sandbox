@@ -1,24 +1,26 @@
 #!/bin/sh
-# 驗證 run.sh 的硬化旗標真的生效。對照 notes.md S2 的實測結論。
-# 改過 run.sh、升過 image、或升過 Docker Desktop 之後，重跑這支。
+# Verify that run.sh's hardening flags actually took effect, against the
+# measured conclusions recorded under S2 in notes.md. Re-run this after any
+# change to run.sh, any image rebuild, or any Docker Desktop upgrade.
 #
-# 用法：./verify-hardening.sh
+# Usage: ./verify-hardening.sh
 set -e
 IMAGE=oab-sandbox:pi
 NAME=oab-verify
 FAIL=0
 
-check() {   # check <描述> <期望值> <實際值>
+check() {   # check <description> <expected> <actual>
     if [ "$2" = "$3" ]; then
-        printf "  ✅ %-24s %s\n" "$1" "$3"
+        printf "  ok %-24s %s\n" "$1" "$3"
     else
-        printf "  ❌ %-24s 期望 %s，實際 %s\n" "$1" "$2" "$3"
+        printf "  X %-24s expected %s, got %s\n" "$1" "$2" "$3"
         FAIL=$((FAIL + 1))
     fi
 }
 
-# 用與 run.sh 完全相同的硬化旗標起一個探針容器。
-# 這裡放假 token 是刻意的：底下要拿它示範 PID 1 的環境變數外洩。
+# Start a probe container with exactly the hardening flags run.sh uses.
+# The fake token is deliberate -- it is what the PID 1 environment leak below
+# is demonstrated with.
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" --entrypoint sh \
     --read-only \
@@ -33,32 +35,34 @@ docker run -d --name "$NAME" --entrypoint sh \
 
 inside() { docker exec --user 1000:1000 "$NAME" sh -c "$1" 2>/dev/null; }
 
-echo "=== S2 硬化旗標 ==="
-check "capability 全清空" "0000000000000000" "$(inside 'grep ^CapEff /proc/self/status | cut -f2')"
-check "非 root"          "1000"        "$(inside 'id -u')"
-check "no_new_privs"     "1"           "$(inside 'grep ^NoNewPrivs /proc/self/status | cut -f2')"
-check "rootfs 唯讀"      "RO"          "$(inside 'touch /usr/bin/x 2>/dev/null && echo RW || echo RO')"
-check "/tmp noexec"      "1"           "$(inside 'grep " /tmp " /proc/mounts | grep -c noexec')"
-check "memory 上限 2g"   "2147483648"  "$(inside 'cat /sys/fs/cgroup/memory.max')"
-check "pids 上限"        "256"         "$(inside 'cat /sys/fs/cgroup/pids.max')"
+echo "=== S2 hardening flags ==="
+check "capabilities empty" "0000000000000000" "$(inside 'grep ^CapEff /proc/self/status | cut -f2')"
+check "non-root"            "1000"        "$(inside 'id -u')"
+check "no_new_privs"        "1"           "$(inside 'grep ^NoNewPrivs /proc/self/status | cut -f2')"
+check "rootfs read-only"    "RO"          "$(inside 'touch /usr/bin/x 2>/dev/null && echo RW || echo RO')"
+check "/tmp noexec"         "1"           "$(inside 'grep " /tmp " /proc/mounts | grep -c noexec')"
+check "memory limit 2g"     "2147483648"  "$(inside 'cat /sys/fs/cgroup/memory.max')"
+check "pids limit"          "256"         "$(inside 'cat /sys/fs/cgroup/pids.max')"
 
 echo
-echo "=== PID 1 環境變數外洩（notes.md S2 已知未解）==="
-# 一個「被攻陷的 agent 子行程」看得到的 PID 1 環境變數名稱清單。
-# 只取變數名，不印值——這支腳本自己不該把 secret 寫進終端機。
+echo "=== PID 1 environment leak (open issue, see S2 in notes.md) ==="
+# The list of PID 1 environment variable names a compromised agent child
+# process can read. Names only, never values -- this script has no business
+# writing a secret to the terminal itself.
 LEAKED_KEYS=$(inside 'tr "\0" "\n" < /proc/1/environ | cut -d= -f1 | grep . | sort | tr "\n" " "')
-echo "  agent 讀得到的 PID 1 變數：$LEAKED_KEYS"
+echo "  PID 1 vars readable by the agent: $LEAKED_KEYS"
 
-# 這裡刻意沒有加判定。DISCORD_BOT_TOKEN 一定會出現在這份清單裡
-# （不洩漏 bot 就不能動），所以「有沒有洩漏」不是有意義的檢查項。
-# 未決：要不要改成斷言「這是唯一的一個 secret」——若哪天有人在 run.sh
-# 加了 -e GOOGLE_APPLICATION_CREDENTIALS 之類的就亮紅燈。
+# There is deliberately no assertion here. DISCORD_BOT_TOKEN will always be in
+# this list -- the bot cannot run without it -- so "did anything leak" is not a
+# meaningful check. Open question: turn this into an assertion that it is the
+# *only* secret present, so that adding something like
+# -e GOOGLE_APPLICATION_CREDENTIALS to run.sh would light up red.
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 echo
 if [ "$FAIL" -eq 0 ]; then
-    echo "全部通過。"
+    echo "all checks passed."
 else
-    echo "$FAIL 項未通過 —— 不要在這個狀態下跑 run.sh。"
+    echo "$FAIL check(s) failed -- do not run run.sh in this state."
     exit 1
 fi

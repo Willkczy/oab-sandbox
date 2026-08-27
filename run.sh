@@ -1,40 +1,42 @@
 #!/bin/sh
-# 沙箱整組啟動。每一個旗標都是某一階實測出來的，不要隨手拿掉。
+# Bring the whole sandbox up. Every flag here came out of a measured stage --
+# do not drop one casually.
 #
-#   S2 硬化    : --read-only / --cap-drop ALL / --user / limits
-#   S3 網路    : --network oab-int（無對外路由），出口只有 oab-proxy
-#   S4 金鑰    : 沒有任何 sa-key 掛載；token 走 oab-broker
+#   S2 hardening : --read-only / --cap-drop ALL / --user / limits
+#   S3 network   : --network oab-int (no route out); the only exit is oab-proxy
+#   S4 keys      : no sa-key is mounted anywhere; tokens come from oab-broker
 #
-# 用法：
-#   export DISCORD_BOT_TOKEN=<第二個 bot 的 token>
+# Usage:
+#   export DISCORD_BOT_TOKEN=<token of the *second* bot>
 #   ./run.sh
 #
-# ⚠️ 這不是常駐服務。練完 ./stop.sh，production 仍在舊機上。
+# NOTE: this is not a long-running service. Run ./stop.sh when finished --
+# production still lives on the other machine.
 
 set -e
 SANDBOX="$HOME/Projects/oab-sandbox"
 
 if [ -z "$DISCORD_BOT_TOKEN" ]; then
-    echo "沒有 DISCORD_BOT_TOKEN。這必須是「第二個」bot 的 token ——" >&2
-    echo "與舊機 production 共用同一個會雙重回應。" >&2
+    echo "DISCORD_BOT_TOKEN is not set. It must be the *second* bot token --" >&2
+    echo "sharing one with production means both instances answer every message." >&2
     exit 1
 fi
 
-# --- 網路：oab-int 是 --internal（沒有對外路由），oab-ext 才有 ---
+# --- Networks: oab-int is --internal (no route out); only oab-ext has one ---
 docker network inspect oab-int >/dev/null 2>&1 || docker network create --internal oab-int
 docker network inspect oab-ext >/dev/null 2>&1 || docker network create oab-ext
 
-# --- 出口閘門 ---
+# --- Egress gateway ---
 if ! docker ps --format '{{.Names}}' | grep -qx oab-proxy; then
     docker rm -f oab-proxy >/dev/null 2>&1 || true
     docker run -d --name oab-proxy --network oab-int \
         -v "$SANDBOX/proxy/squid.conf:/etc/squid/squid.conf:ro" \
         ubuntu/squid:latest >/dev/null
     docker network connect oab-ext oab-proxy
-    echo "oab-proxy 已啟動"
+    echo "oab-proxy started"
 fi
 
-# --- token broker：唯一持有 SA 金鑰的容器 ---
+# --- Token broker: the only container that holds the SA key ---
 if ! docker ps --format '{{.Names}}' | grep -qx oab-broker; then
     docker rm -f oab-broker >/dev/null 2>&1 || true
     docker run -d --name oab-broker --network oab-int \
@@ -45,16 +47,18 @@ if ! docker ps --format '{{.Names}}' | grep -qx oab-broker; then
         -e NO_PROXY=localhost,127.0.0.1,oab-proxy \
         -v "$HOME/.config/openab/sa-key.json:/run/secrets/sa-key.json:ro" \
         oab-broker:latest >/dev/null
-    echo "oab-broker 已啟動"
+    echo "oab-broker started"
 fi
 
-# --- agent ---
+# --- Agent ---
 #
-# 掛載清單刻意很短。除了這幾個路徑，容器裡看不到主機的任何東西：
-#   config.toml     openab 的設定（image 的 CMD 寫死讀 /etc/openab/config.toml）
-#   pi-coach        模型 wrapper
-#   adc-marker.json 不是憑證。只為滿足 pi 的 fileExists 閘門，理由見 pi-coach 註解
-#   vault           獨立 clone，唯一可寫的主機路徑
+# The mount list is deliberately short. Apart from these paths, the container
+# sees nothing of the host:
+#   config.toml     openab's config (the image's CMD hardcodes /etc/openab/config.toml)
+#   pi-coach        the model wrapper
+#   adc-marker.json Not a credential. It exists only to satisfy pi's fileExists
+#                   gate -- see the comments in pi-coach for why.
+#   vault           a separate clone, and the only writable host path
 docker rm -f oab-sandbox >/dev/null 2>&1 || true
 exec docker run --rm --name oab-sandbox \
     --network oab-int \
