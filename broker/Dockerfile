@@ -1,19 +1,22 @@
-# 這個 image 唯一的職責是持有 SA 私鑰並換發短期 token。
-# 刻意做得極小：沒有 shell 工具、沒有 curl、沒有 git —— 一旦被打進來，
-# 手上能用的東西越少越好。
+# This image has exactly one job: hold the SA private key and exchange it for
+# short-lived tokens. It is kept deliberately bare -- no shell tooling, no curl,
+# no git. If someone does get in here, the less there is to reach for the
+# better.
 FROM node:22-trixie-slim
 
 WORKDIR /app
 
-# 用 lockfile + npm ci 而非 npm install：這是唯一持有 SA 私鑰的容器，
-# 依賴樹浮動等於信任邊界浮動。npm ci 只裝 lockfile 裡釘死的版本，
-# 且 lockfile 與 package.json 不一致時會直接失敗而不是默默解析新版。
+# Lockfile plus npm ci, not npm install: this is the only container holding the
+# SA private key, and a drifting dependency tree is a drifting trust boundary.
+# npm ci installs exactly what the lockfile pins, and fails outright when the
+# lockfile and package.json disagree instead of quietly resolving something
+# newer.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY server.js ./
 
-# node:22 image 內建 uid 1000 的 node 使用者。
+# The node:22 image already ships a "node" user at uid 1000.
 USER node
 
 EXPOSE 8080

@@ -1,16 +1,19 @@
-// GCE metadata server 相容的 token broker。
+// A token broker that speaks the GCE metadata server protocol.
 //
-// 目的：讓 agent 容器裡「沒有」service account 私鑰，但仍然拿得到 Vertex 的
-// access token。金鑰只存在這支服務的檔案系統裡；agent 那邊只設
-// GCE_METADATA_HOST 指過來。
+// The point: the agent container holds *no* service-account private key, yet
+// still obtains Vertex access tokens. The key exists only on this service's
+// filesystem; the agent side is given nothing but GCE_METADATA_HOST pointing
+// here.
 //
-// 為什麼這樣行得通：google-auth-library 的 ADC 鏈裡有一環是「在 GCE 上就去問
-// metadata server」，而它認的位址來自 GCE_METADATA_HOST 環境變數
-// （gcp-metadata 8.1.2 的 getBaseUrl()）。所以只要回應長得像 metadata server，
-// 整條鏈就會走過來——不需要改 pi 一行程式碼。
+// Why this works: one link in google-auth-library's ADC chain is "if we are on
+// GCE, ask the metadata server", and the address it trusts comes from the
+// GCE_METADATA_HOST environment variable (getBaseUrl() in gcp-metadata 8.1.2).
+// So anything that responds like a metadata server pulls the whole chain
+// through -- without changing a single line of pi.
 //
-// 爆炸半徑的變化才是重點：agent 仍然拿得到 token（本來就必須拿得到，
-// 否則不能工作），但拿不到「永不過期的私鑰」。從長期憑證降成 1 小時的短期票據。
+// The change in blast radius is the real result. The agent still gets a token
+// (it has to, or it cannot work), but it never gets a private key that never
+// expires. A long-lived credential becomes a one-hour ticket.
 
 import http from "node:http";
 import { GoogleAuth } from "google-auth-library";
@@ -24,7 +27,8 @@ const auth = new GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/cloud-platform"],
 });
 
-// 這兩個從金鑰檔本身讀，不要另外用環境變數傳——少一個會不一致的來源。
+// Project id and client email are read from the key file itself rather than
+// passed in separately: one fewer source that can disagree with the others.
 let clientPromise = null;
 function getClient() {
   clientPromise ??= auth.getClient();
@@ -32,8 +36,9 @@ function getClient() {
 }
 
 function send(res, code, body, contentType = "application/text") {
-  // ⚠️ 這個 header 是偵測的關鍵。gcp-metadata 收到回應會檢查
-  // Metadata-Flavor: Google，不符就丟 RangeError 拒絕使用。
+  // This header is what makes detection work. gcp-metadata checks every
+  // response for Metadata-Flavor: Google and throws a RangeError if it is
+  // missing, refusing to use the result.
   res.writeHead(code, {
     "Metadata-Flavor": "Google",
     "Content-Type": contentType,
@@ -58,23 +63,26 @@ async function handleToken(res) {
 const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
 
-  // 真正的 metadata server 也要求這個 header，用途是擋掉瀏覽器與
-  // DNS rebinding 那類跨來源存取。照抄，不要因為「反正在內網」就省略。
+  // The real metadata server demands this header too, to shut out browsers and
+  // DNS-rebinding style cross-origin access. Match it -- do not skip it on the
+  // grounds that this only listens on an internal network.
   if (req.headers["metadata-flavor"] !== "Google") {
-    console.log(`DENY  ${req.method} ${path}  (缺 Metadata-Flavor header)`);
+    console.log(`DENY  ${req.method} ${path}  (missing Metadata-Flavor header)`);
     return send(res, 403, "Metadata-Flavor: Google required");
   }
 
-  // 每一次取 token 都留下紀錄。這份 log 在 agent 的控制範圍外，
-  // 是主機模式（金鑰就是一個它讀得到的檔案）完全沒有的能力。
+  // Every token fetch leaves a record. This log sits outside the agent's
+  // reach, which is a capability the host-mode setup simply does not have:
+  // there, the key is just a file the agent can read.
   console.log(`ALLOW ${req.method} ${path}`);
 
   try {
     switch (path) {
-      // 偵測用的路徑。gcp-metadata 的 isAvailable() 打的是
-      // /computeMetadata/v1/instance（沒有 property 的 instance()），
-      // 少了這條就會判定「不在 GCE 上」，整條 ADC 鏈直接放棄，
-      // 錯誤訊息是很不透明的 "Could not load the default credentials"。
+      // Detection paths. gcp-metadata's isAvailable() hits
+      // /computeMetadata/v1/instance -- instance() with no property. Without
+      // this case it concludes "not on GCE", the whole ADC chain gives up, and
+      // all you get is the famously opaque "Could not load the default
+      // credentials".
       case "/":
       case "/computeMetadata/v1":
       case "/computeMetadata/v1/":
@@ -102,8 +110,9 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, UNIVERSE);
 
       default:
-        // 沒實作的路徑一律 404，不要回 200 空字串——那會讓上游函式庫
-        // 把「空值」當成合法答案，錯誤會延後爆在很遠的地方。
+        // Anything unimplemented is a 404, never a 200 with an empty body:
+        // an empty body reads as a legitimate answer to the caller, and the
+        // failure then surfaces somewhere far away from its cause.
         return send(res, 404, "");
     }
   } catch (err) {
@@ -113,5 +122,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`token broker 就緒：0.0.0.0:${PORT}，金鑰 ${KEY_PATH}`);
+  console.log(`token broker ready on 0.0.0.0:${PORT}, key ${KEY_PATH}`);
 });
