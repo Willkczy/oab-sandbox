@@ -76,6 +76,14 @@ export DISCORD_BOT_TOKEN=<your bot token>
 ./stop.sh
 ```
 
+`stop.sh` copies the agent's session log out of the container before removing it, into
+`learn/out/archive/<timestamp>/` (gitignored). pi writes those sessions to a tmpfs so the
+agent only ever sees the current one — `config/pi-coach` explains why — and archiving
+them keeps the full history without giving that property up, because the archive lives on
+the host where the agent cannot reach it. **Do not add `learn/` to `run.sh`'s mount
+list**; that would hand the accumulated history straight back to the agent.
+
+
 `verify-hardening.sh` is worth re-running after any change to `run.sh`, any image
 rebuild, or any Docker Desktop upgrade. It asserts capabilities are empty, the process
 is non-root, `no_new_privs` is set, the rootfs is read-only, `/tmp` is `noexec`, and the
@@ -115,6 +123,10 @@ otherwise the value in `config/config.toml`, and a hard error if neither is pres
   values) so the list stays visible. Turning it into an assertion — "this must be the
   *only* secret there" — is still open.
 - **`config/pi-coach` and `run.sh` assume the repo lives at `~/Projects/oab-sandbox`.**
+- **A crashed container loses its session log.** `stop.sh` copies the agent's session
+  log out of the tmpfs to `learn/out/archive/` before removing the container, so an
+  ordinary stop keeps the record. A container that dies on its own is removed by
+  `--rm` first, and nothing is archived.
 
 ## What the agent actually does — `vault/`
 
