@@ -20,6 +20,16 @@ docker run --rm --entrypoint sh "$IMAGE" -c "ls $TOOLS" \
   | grep -E '^(bash|read|write|edit|find|grep|ls)$' | sed 's/^/  /'
 
 echo
+# The second half compares against the vault's own rules. vault/ is a separate
+# repo (see the README), so without it, stop here having shown the real boundary.
+if [ ! -f "$(dirname "$0")/../vault/AGENTS.md" ]; then
+    echo
+    echo "The other half of this comparison needs vault/AGENTS.md, which lives in a"
+    echo "separate repo. The list above is the enforceable boundary; the claimed one"
+    echo "is a table of per-section write permissions that no tool can enforce."
+    exit 0
+fi
+
 echo "=== The write boundary AGENTS.md claims (the convention) ==="
 sed -n '/^## 寫入權限/,/^### 來源標記/p' "$(dirname "$0")/../vault/AGENTS.md" \
   | grep '^|' | sed 's/^/  /'

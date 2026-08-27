@@ -24,6 +24,14 @@ python3 learn/lib/token_growth.py "$SESSIONS"
 
 echo
 echo "=== Standing cost: the fixed overhead re-paid on every single turn ==="
+
+# vault/ is a separate repo and is not part of this one (see the README). Without
+# it there is nothing to weigh, so say why rather than emitting shell errors.
+if [ ! -d vault ]; then
+    echo "  skipped: needs vault/ mounted here, which this repo does not ship."
+    echo "  Point the script at any directory of prompt files to see the same effect."
+    exit 0
+fi
 for f in vault/AGENTS.md vault/教練規則/*.md; do
     chars=$(wc -m < "$f" | tr -d ' ')
     printf "  %-34s %6s chars  ~= %5s tokens\n" "${f#vault/}" "$chars" "$((chars * 2 / 3))"
