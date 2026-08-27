@@ -11,7 +11,9 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SESSIONS="${1:-$HOME/.pi/agent/sessions/YOUR_SESSION_DIR}"
+# 不給參數時，自動挑 ~/.pi/agent/sessions/ 底下最近有活動的那個。
+# （原本這裡寫死作者的 vault 路徑，別人 clone 下來會直接撲空。）
+SESSIONS="${1:-$(ls -dt "$HOME"/.pi/agent/sessions/*/ 2>/dev/null | head -1)}"
 
 echo "=== 每輪送進模型的 token 量 ==="
 python3 learn/lib/token_growth.py "$SESSIONS"

@@ -11,13 +11,14 @@
 
 set -e
 cd "$(dirname "$0")/.."
+. learn/lib/project-id.sh
 
 run() {
     docker run --rm --network oab-int \
         --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
         -v oab-pi-home:/home/node/.pi \
         --cap-drop ALL --security-opt=no-new-privileges --user 1000:1000 \
-        -e GOOGLE_CLOUD_PROJECT=your-gcp-project-id \
+        -e GOOGLE_CLOUD_PROJECT=$GCP_PROJECT \
         -e GOOGLE_CLOUD_LOCATION=global \
         -e GCE_METADATA_HOST=oab-broker:8080 \
         -e HTTPS_PROXY=http://oab-proxy:3128 \

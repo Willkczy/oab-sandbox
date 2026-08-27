@@ -45,7 +45,7 @@ if [ "$GRADE_ONLY" -eq 0 ]; then
             --cap-drop ALL --security-opt no-new-privileges \
             --user 1000:1000 --pids-limit 256 \
             --memory 2g --memory-swap 2g \
-            -e GOOGLE_CLOUD_PROJECT=your-gcp-project-id \
+            -e GOOGLE_CLOUD_PROJECT=$GCP_PROJECT \
             -e GOOGLE_CLOUD_LOCATION=global \
             -e GCE_METADATA_HOST=oab-broker:8080 \
             -e HTTPS_PROXY=http://oab-proxy:3128 \

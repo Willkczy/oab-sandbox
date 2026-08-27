@@ -1,3 +1,14 @@
+# ══════════════════════════════════════════════════════════════════
+# 範本檔。複製成 config.toml 後填入自己的值：
+#
+#   cp config/config.toml.example config/config.toml
+#
+# config.toml 本身在 .gitignore 裡——它含有你的 Discord 帳號 ID 與
+# GCP 專案 ID，都不是密鑰，但沒有理由讓它們進公開版控。
+#
+# 要改的兩處：allowed_users、GOOGLE_CLOUD_PROJECT
+# ══════════════════════════════════════════════════════════════════
+
 # OpenAB 容器沙箱版 — 與舊機 production 並行，互不干擾
 #
 # 以 ~/.config/openab/config.toml 為底，改的都是容器相關的部分。
@@ -11,7 +22,7 @@
 bot_token = "${DISCORD_BOT_TOKEN}"
 
 allow_all_users = false
-allowed_users = ["YOUR_DISCORD_USER_ID"]
+allowed_users = ["YOUR_DISCORD_USER_ID"]  # 你的 Discord 帳號 ID（開發者模式→右鍵複製）
 allow_all_channels = true
 allow_dm = true
 
