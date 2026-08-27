@@ -1,0 +1,1 @@
+{"_comment": "刻意不是有效憑證。只為滿足 pi 的 fileExists 閘門，真正的 token 走 metadata broker。若有任何程式真的去讀它，會 JSON 解析失敗並大聲報錯——那是刻意的。"}

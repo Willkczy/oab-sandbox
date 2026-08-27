@@ -1,0 +1,51 @@
+# OpenAB 容器沙箱版 — 與舊機 production 並行，互不干擾
+#
+# 以 ~/.config/openab/config.toml 為底，改的都是容器相關的部分。
+# 其餘（max_sessions、markdown、reactions）照抄——那些是舊機踩出來的結論。
+#
+# 計劃見 ~/.claude/plans/glistening-stirring-bubble.md
+# 實作筆記見 ../notes.md
+
+[discord]
+# ⚠️ 必須是「第二個」bot 的 token。與舊機共用同一個 token 會雙重回應。
+bot_token = "${DISCORD_BOT_TOKEN}"
+
+allow_all_users = false
+allowed_users = ["YOUR_DISCORD_USER_ID"]
+allow_all_channels = true
+allow_dm = true
+
+[agent]
+# image 的 OPENAB_AGENT_COMMAND 預設是 openab-agent，但那支 binary
+# 根本不在 image 裡（實測 command -v openab-agent → MISSING），
+# 所以這行不是選配，是必要的。
+command = "pi-acp"
+
+# 掛的是 ~/Projects/oab-sandbox/vault（獨立 clone），不是 iCloud 那份
+# —— 避開 virtiofs 與雙機同寫衝突。
+working_dir = "/workspace"
+
+# ⚠️ openab 會對 agent 子行程做 env_clear，只留 HOME / PATH / USER，
+#    所以底下每一個變數都必須明列，少一個就靜默失效。
+#
+# GCE_METADATA_HOST  : 指向 token broker（S4）。**不帶 scheme**，
+#                      gcp-metadata 的 getBaseUrl() 會自己補 http://。
+#                      注意這裡沒有 GOOGLE_APPLICATION_CREDENTIALS —— 那正是重點，
+#                      金鑰只存在 broker 容器裡。
+# HTTPS_PROXY 等     : 指向 squid（S3）。agent 容器接的是 --internal 網路，
+#                      沒有這個就完全打不出去。
+# NO_PROXY           : broker 與 proxy 自己不能再繞 proxy。
+env = { PI_ACP_PI_COMMAND = "/home/node/bin/pi-coach", GOOGLE_CLOUD_PROJECT = "your-gcp-project-id", GOOGLE_CLOUD_LOCATION = "global", GCE_METADATA_HOST = "oab-broker:8080", HTTPS_PROXY = "http://oab-proxy:3128", HTTP_PROXY = "http://oab-proxy:3128", NO_PROXY = "localhost,127.0.0.1,oab-proxy,oab-broker" }
+
+# 主力機/舊機版本有 inherit_env = ["GOOGLE_APPLICATION_CREDENTIALS"]。
+# 這裡刻意拿掉：容器裡根本沒有那個檔案，token 走 broker。
+
+[pool]
+max_sessions = 3
+session_ttl_hours = 6
+
+[markdown]
+tables = "code"
+
+[reactions]
+enabled = true

@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+
+# ══════════════════════════════════════════════════════════════════
+# vault：獨立 repo，不是這個 repo 的一部分
+#
+# remote 在 iCloud（Obsidian 那份），變更節奏跟著刷題走，
+# 與沙箱基礎設施的生命週期無關。run.sh 也是把它當「掛載進去
+# 的資料」而不是程式碼——見 config.toml 的 working_dir 註解。
+#
+# 要改 vault 請 cd vault && git ...，那邊有自己的分支與歷史。
+# ══════════════════════════════════════════════════════════════════
+vault/
+
+# 實驗產出：可重跑，不進版控（腳本本身才是資產）
+learn/out/
+
+# Python 位元碼（learn/lib/ 底下的腳本會產生）
+__pycache__/
+*.pyc
+
+# Claude Code 個人設定（outputStyle 等，屬於這台機器不屬於專案）
+.claude/settings.local.json
+
+# ══════════════════════════════════════════════════════════════════
+# 憑證：絕對不進版控
+#
+# 目前這棵樹裡沒有任何真憑證——SA 金鑰在 ~/.config/openab/sa-key.json
+# 由 run.sh 以 :ro 掛進 broker 容器，Discord token 走 env 插值。
+# 底下規則是預防性的，成本為零，但一次 `git add .` 的意外就回不來。
+#
+# 注意：config/adc-marker.json 是刻意的假檔（滿足 pi 的 fileExists
+# 閘門），不在這裡的名單上是對的。若日後改名讓它更「像真的」，
+# 會被下面的規則誤擋——改名時記得回來看這裡。
+# ══════════════════════════════════════════════════════════════════
+
+# Google Cloud service account 金鑰
+sa-key.json
+*-key.json
+*.serviceaccount.json
+application_default_credentials.json
+
+# agent CLI 寫在工作目錄的憑證
+auth.json
+.pi/
+.gemini/
+
+# 泛用密鑰樣式
+.env
+.env.*
+*.pem
+*.p12
+secrets.toml
+config.local.toml

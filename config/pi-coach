@@ -1,0 +1,70 @@
+#!/bin/sh
+# 容器版 wrapper。與 ~/.config/openab/pi-coach 同樣的理由：
+# pi-acp 只能把 PI_ACP_PI_COMMAND 當單一 binary 路徑 spawn（非 shell 模式），
+# 沒辦法夾帶 --model，所以模型選擇包在這裡。
+#
+# 模型選擇依據（2026-07-26 實測）：
+#   gemini-3.6-flash        ✅ 守「不給完整解法」，說出規則裡的拒絕台詞後給空骨架
+#   gemini-3.1-pro-preview  ✅ 會反問要哪一階，判斷更好但較貴
+#   gemini-3.5-flash-lite   ❌ 直接交出近乎完整實作 —— 絕不可用於教練引導
+#
+# 3.6-flash 需要 pi >= 0.82.1（基底 image 釘的 0.79.9 模型清單裡沒有它），
+# 所以 Dockerfile 疊了一層升版。與主力機 production 同模型，對照才有意義。
+
+# ⚠️⚠️ `env -u HOME` 不是筆誤，是 S4（金鑰不進容器）成立的關鍵。
+#
+# pi 的 vertex provider（pi-ai `providers/google-vertex.js` 的 resolve()）在
+# 真正取 token 之前，會先做一個純粹的存在性檢查：
+#     fileExists(GOOGLE_APPLICATION_CREDENTIALS ?? "~/.config/gcloud/application_default_credentials.json")
+# 檔案不存在就直接判定「No API key found for google-vertex」，連 ADC 鏈都不會走。
+#
+# 但真正換 token 的那層（`api/google-vertex.js` 的 buildGoogleAuthOptions）是：
+#     GOOGLE_APPLICATION_CREDENTIALS 沒設 → 回 undefined → 走完整 ADC 鏈 → 問 metadata server
+#
+# 兩者對 HOME 的用法不一樣，這個不對稱就是縫隙：
+#   pi                  用 `~` 展開 → os.homedir() → HOME 沒設時回退到 passwd → /home/node ✅ 找得到標記檔
+#   google-auth-library 直接讀 process.env['HOME'] → 沒設就跳過 well-known 檔 → 落到 metadata server ✅
+#
+# 所以：掛一個「不是憑證」的標記檔到 ~/.config/gcloud/application_default_credentials.json
+# 滿足前者，同時 unset HOME 讓後者略過它。金鑰完全不需要進這個容器。
+#
+# ⚠️ 這很脆。它依賴兩個實作細節：os.homedir() 的 passwd 回退，
+#    以及 google-auth-library 直接讀 process.env['HOME']。
+#    升級 pi 或 google-auth-library 後要重驗。壞掉的徵兆是
+#    "No API key found" 或 "Could not load the default credentials"。
+
+# --- session 檔的位置：刻意放進 tmpfs ---
+#
+# 問題：AGENTS.md 有一條規則寫「不要直接讀 ~/.pi/agent/sessions/ 的 .jsonl，
+#       讀一次會吃掉八萬多 input token（實測 $0.18）」。
+#       但那只是 prompt 規則 —— agent 有 bash 也有 read 工具，實際上讀得到。
+#       模型不聽話的時候，沒有任何東西會擋下來。
+#
+# 做不到「真的讓它讀不到」：pi 自己要寫 session，而 bash 工具是 pi 的子行程，
+# 同一個 uid、同一個 mount namespace。工具層的粒度是「工具」，我們要的粒度
+# 是「路徑」——對不上。
+#
+# 所以改成降低爆炸半徑（與 S4 同一個思路）：把 session 目錄指到 tmpfs。
+# 那裡只會有這次容器生命週期內的 session，讀下去的最壞情況從 $0.18
+# 降到不到 $0.01。
+#
+# 代價（已知並接受）：
+#   1. 容器停掉，session 歷史就沒了 → pi_cost.py --days N 在沙箱裡失去意義
+#   2. pi-acp 的索引在持久 volume（~/.pi/pi-acp），重啟後會指向已消失的檔案
+#      → 實測 pi 會自己建一個新的，不報錯，只是舊對話接不回去。
+#      openab 的 session_ttl_hours = 6 本來就會過期，可接受。
+#
+# 要換位置的話設 PI_SESSION_DIR。注意 openab 對 agent 子行程做 env_clear，
+# 所以那個變數必須列在 config.toml 的 [agent] env 裡才傳得進來。
+SESSION_DIR="${PI_SESSION_DIR:-/tmp/sessions}"
+
+# PI_SESSION_DIR 同時往下傳，讓 pi 的子行程（例如 bash 工具跑的
+# scripts/pi_cost.py）知道 session 被搬到哪裡了。
+#
+# 為什麼不用寫進 config.toml：openab 的 env_clear 只發生在 openab → pi-acp
+# 那一段，之後 pi-coach → pi → bash 工具都是正常繼承。在這裡 export 就到得了，
+# 而且「決定位置」與「告知位置」留在同一個地方，不會有兩處要同步的問題。
+exec env -u HOME PI_SESSION_DIR="$SESSION_DIR" pi \
+    --model google-vertex/gemini-3.6-flash \
+    --session-dir "$SESSION_DIR" \
+    "$@"

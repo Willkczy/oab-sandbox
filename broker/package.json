@@ -1,0 +1,10 @@
+{
+  "name": "oab-sandbox-token-broker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "dependencies": {
+    "google-auth-library": "^10.6.2"
+  }
+}
