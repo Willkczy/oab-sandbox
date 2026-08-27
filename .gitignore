@@ -2,58 +2,67 @@
 .DS_Store
 
 # ══════════════════════════════════════════════════════════════════
-# vault：獨立 repo，不是這個 repo 的一部分
+# vault/ is a separate repo, not part of this one.
 #
-# remote 在 iCloud（Obsidian 那份），變更節奏跟著刷題走，
-# 與沙箱基礎設施的生命週期無關。run.sh 也是把它當「掛載進去
-# 的資料」而不是程式碼——見 config.toml 的 working_dir 註解。
+# Its remote lives in iCloud, it changes on the rhythm of practice
+# sessions, and none of that has anything to do with the lifecycle of
+# this sandbox. run.sh treats it as data to mount rather than code --
+# see the working_dir comment in config.toml.
 #
-# 要改 vault 請 cd vault && git ...，那邊有自己的分支與歷史。
+# To change it: cd vault && git ... -- it has its own branches and
+# history over there.
 # ══════════════════════════════════════════════════════════════════
 vault/
 
-# 本機實際設定：含 Discord 帳號 ID 與 GCP 專案 ID。
-# 都不是密鑰，但沒理由進公開版控。範本見 config.toml.example。
+# The real config: holds a Discord account id and a GCP project id.
+# Neither is a credential, but neither belongs in a public repo either.
+# See config.toml.example for the template.
 config/config.toml
 
-# 實驗產出：可重跑，不進版控（腳本本身才是資產）
+# Experiment output. Re-runnable, so it stays out of version control --
+# the scripts are the asset.
 learn/out/
 
-# Node 依賴：broker 的 npm install 發生在 image build 內，
-# 這條純粹是防止本機 debug 後誤 commit 上千個檔案
+# Node dependencies. broker's npm install happens inside the image build,
+# so this line exists purely to prevent an accidental commit after local
+# debugging.
 node_modules/
 
-# Python 位元碼（learn/lib/ 底下的腳本會產生）
+# Python bytecode, produced by the scripts under learn/lib/
 __pycache__/
 *.pyc
 
-# Claude Code 個人設定（outputStyle 等，屬於這台機器不屬於專案）
+# Claude Code's per-machine settings (output style and so on) -- these
+# belong to this machine, not to the project.
 .claude/settings.local.json
 
 # ══════════════════════════════════════════════════════════════════
-# 憑證：絕對不進版控
+# Credentials: never, under any circumstances, in version control.
 #
-# 目前這棵樹裡沒有任何真憑證——SA 金鑰在 ~/.config/openab/sa-key.json
-# 由 run.sh 以 :ro 掛進 broker 容器，Discord token 走 env 插值。
-# 底下規則是預防性的，成本為零，但一次 `git add .` 的意外就回不來。
+# Nothing in this tree is a real credential today. The SA key lives at
+# ~/.config/openab/sa-key.json and is mounted :ro into the broker by
+# run.sh; the Discord token arrives through env interpolation. The rules
+# below are preventive, they cost nothing, and one accidental
+# `git add .` is not something you get to undo.
 #
-# 注意：config/adc-marker.json 是刻意的假檔（滿足 pi 的 fileExists
-# 閘門），不在這裡的名單上是對的。若日後改名讓它更「像真的」，
-# 會被下面的規則誤擋——改名時記得回來看這裡。
+# Note: config/adc-marker.json is an intentional fake, present only to
+# satisfy pi's fileExists gate, and it is correctly absent from the list
+# below. If it is ever renamed to look more convincing, these rules will
+# silently start catching it -- check back here when renaming.
 # ══════════════════════════════════════════════════════════════════
 
-# Google Cloud service account 金鑰
+# Google Cloud service account keys
 sa-key.json
 *-key.json
 *.serviceaccount.json
 application_default_credentials.json
 
-# agent CLI 寫在工作目錄的憑證
+# Credentials that agent CLIs write into the working directory
 auth.json
 .pi/
 .gemini/
 
-# 泛用密鑰樣式
+# Generic secret patterns
 .env
 .env.*
 *.pem

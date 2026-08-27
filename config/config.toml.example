@@ -1,55 +1,66 @@
 # ══════════════════════════════════════════════════════════════════
-# 範本檔。複製成 config.toml 後填入自己的值：
+# Template. Copy it to config.toml and fill in your own values:
 #
 #   cp config/config.toml.example config/config.toml
 #
-# config.toml 本身在 .gitignore 裡——它含有你的 Discord 帳號 ID 與
-# GCP 專案 ID，都不是密鑰，但沒有理由讓它們進公開版控。
+# config.toml itself is gitignored. It carries your Discord account id
+# and your GCP project id -- neither is a secret, but neither has any
+# reason to sit in a public repository.
 #
-# 要改的兩處：allowed_users、GOOGLE_CLOUD_PROJECT
+# Two things to change: allowed_users and GOOGLE_CLOUD_PROJECT.
 # ══════════════════════════════════════════════════════════════════
 
-# OpenAB 容器沙箱版 — 與舊機 production 並行，互不干擾
+# OpenAB, containerised. Runs alongside the production instance on the
+# other machine without interfering with it.
 #
-# 以 ~/.config/openab/config.toml 為底，改的都是容器相關的部分。
-# 其餘（max_sessions、markdown、reactions）照抄——那些是舊機踩出來的結論。
+# Based on ~/.config/openab/config.toml, with only the container-related
+# parts changed. Everything else -- max_sessions, markdown, reactions --
+# is copied verbatim, because those settings are conclusions the other
+# machine already paid for.
 #
-# 計劃見 ~/.claude/plans/glistening-stirring-bubble.md
-# 實作筆記見 ../notes.md
+# Implementation notes: ../notes.md
 
 [discord]
-# ⚠️ 必須是「第二個」bot 的 token。與舊機共用同一個 token 會雙重回應。
+# Must be the *second* bot's token. Sharing one with the other machine
+# means both instances answer every message.
 bot_token = "${DISCORD_BOT_TOKEN}"
 
 allow_all_users = false
-allowed_users = ["YOUR_DISCORD_USER_ID"]  # 你的 Discord 帳號 ID（開發者模式→右鍵複製）
+allowed_users = ["YOUR_DISCORD_USER_ID"]  # your Discord account id (enable Developer Mode, right-click, Copy ID)
 allow_all_channels = true
 allow_dm = true
 
 [agent]
-# image 的 OPENAB_AGENT_COMMAND 預設是 openab-agent，但那支 binary
-# 根本不在 image 裡（實測 command -v openab-agent → MISSING），
-# 所以這行不是選配，是必要的。
+# The image defaults OPENAB_AGENT_COMMAND to openab-agent, but that binary
+# is simply not in the image -- `command -v openab-agent` returns MISSING.
+# This line is required, not optional.
 command = "pi-acp"
 
-# 掛的是 ~/Projects/oab-sandbox/vault（獨立 clone），不是 iCloud 那份
-# —— 避開 virtiofs 與雙機同寫衝突。
+# What gets mounted here is ~/Projects/oab-sandbox/vault, a separate
+# clone -- not the copy in iCloud. That avoids virtiofs and the write
+# conflicts of two machines touching the same files.
 working_dir = "/workspace"
 
-# ⚠️ openab 會對 agent 子行程做 env_clear，只留 HOME / PATH / USER，
-#    所以底下每一個變數都必須明列，少一個就靜默失效。
+# openab runs env_clear on the agent subprocess, keeping only HOME, PATH
+# and USER. Every variable below therefore has to be listed explicitly --
+# miss one and it fails silently.
 #
-# GCE_METADATA_HOST  : 指向 token broker（S4）。**不帶 scheme**，
-#                      gcp-metadata 的 getBaseUrl() 會自己補 http://。
-#                      注意這裡沒有 GOOGLE_APPLICATION_CREDENTIALS —— 那正是重點，
-#                      金鑰只存在 broker 容器裡。
-# HTTPS_PROXY 等     : 指向 squid（S3）。agent 容器接的是 --internal 網路，
-#                      沒有這個就完全打不出去。
-# NO_PROXY           : broker 與 proxy 自己不能再繞 proxy。
+# GCE_METADATA_HOST  : points at the token broker (S4). No scheme --
+#                      gcp-metadata's getBaseUrl() prepends http:// itself.
+#                      Note the absence of GOOGLE_APPLICATION_CREDENTIALS.
+#                      That absence is the whole point: the key exists only
+#                      inside the broker container.
+# HTTPS_PROXY etc.   : point at squid (S3). The agent container is on an
+#                      --internal network and cannot reach anything without
+#                      these.
+# NO_PROXY           : the broker and the proxy must not be routed through
+#                      the proxy themselves.
 env = { PI_ACP_PI_COMMAND = "/home/node/bin/pi-coach", GOOGLE_CLOUD_PROJECT = "your-gcp-project-id", GOOGLE_CLOUD_LOCATION = "global", GCE_METADATA_HOST = "oab-broker:8080", HTTPS_PROXY = "http://oab-proxy:3128", HTTP_PROXY = "http://oab-proxy:3128", NO_PROXY = "localhost,127.0.0.1,oab-proxy,oab-broker" }
 
-# 主力機/舊機版本有 inherit_env = ["GOOGLE_APPLICATION_CREDENTIALS"]。
-# 這裡刻意拿掉：容器裡根本沒有那個檔案，token 走 broker。
+# The version on the other machine has
+# inherit_env = ["GOOGLE_APPLICATION_CREDENTIALS"]. It is dropped here on
+# purpose: that file does not exist in the container, and tokens come from
+# the broker.
 
 [pool]
 max_sessions = 3
