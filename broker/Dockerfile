@@ -5,8 +5,11 @@ FROM node:22-trixie-slim
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+# 用 lockfile + npm ci 而非 npm install：這是唯一持有 SA 私鑰的容器，
+# 依賴樹浮動等於信任邊界浮動。npm ci 只裝 lockfile 裡釘死的版本，
+# 且 lockfile 與 package.json 不一致時會直接失敗而不是默默解析新版。
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY server.js ./
 

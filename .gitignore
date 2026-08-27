@@ -15,6 +15,10 @@ vault/
 # 實驗產出：可重跑，不進版控（腳本本身才是資產）
 learn/out/
 
+# Node 依賴：broker 的 npm install 發生在 image build 內，
+# 這條純粹是防止本機 debug 後誤 commit 上千個檔案
+node_modules/
+
 # Python 位元碼（learn/lib/ 底下的腳本會產生）
 __pycache__/
 *.pyc
