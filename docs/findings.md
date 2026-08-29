@@ -221,10 +221,21 @@ wrong is to score a violation as a pass.
   through a broker produces an audit trail outside the agent's reach — arguably
   a larger gain than the shortened credential lifetime.
 
+- **`docker cp` cannot read a tmpfs mount.** It copies from the container's
+  filesystem layers, and a tmpfs is mounted by the kernel outside them, so
+  `docker cp oab-sandbox:/tmp/sessions .` fails with `Could not find the file
+  /tmp/sessions in container` while `docker exec ls` lists the files at that very
+  path. Streaming a tar out of `docker exec` crosses that boundary, which is how
+  `stop.sh` archives the session log.
+
 ---
 
 ## Still open
 
+- **A crash takes the session log with it.** `stop.sh` archives the log before
+  removing the container, which covers an ordinary stop. A container that dies on
+  its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
+  would run, and that is exactly when the log would have been worth the most.
 - **Whether Discord's gateway survives the proxy.** serenity uses
   `async-tungstenite`, which is not expected to honour proxy environment
   variables. If it does not, the agent container has to join `oab-ext` as well —

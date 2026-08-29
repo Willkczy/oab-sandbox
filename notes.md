@@ -434,6 +434,57 @@ tmpfs 只留當次容器生命週期的檔，讀下去從 32K token 降到通常
 
 ---
 
+## 開發 ②：停機前把 session 封存到主機（2026-08-27）
+
+開發 ① 用 tmpfs 換到了小爆炸半徑，代價就寫在上一節：容器一停，紀錄就沒了。
+但這兩件事其實不必二選一。
+
+關鍵是「保存」與「可達」是兩回事。tmpfs 真正要的性質是
+**agent 只看得到本次 session**，它並不要求那份紀錄從此消失。
+只要在容器收掉之前把檔案搬到 agent 到不了的地方，兩個目標同時成立：
+
+```
+容器內 /tmp/sessions (tmpfs)   ← agent 讀得到，但只有本次
+        │ stop.sh 停機前搬出
+        ▼
+主機 learn/out/archive/         ← 完整紀錄，agent 看不到
+```
+
+成立的條件是 **`learn/` 不在 `run.sh` 的掛載清單裡**。哪天為了方便掛進去，
+累積的歷史就一次還給 agent，tmpfs 那層等於白做。
+
+### 🔴 `docker cp` 讀不到 tmpfs
+
+第一版想用 `docker cp`，直接失敗：
+
+```
+$ docker cp oab-sandbox:/tmp/sessions ./out
+Error response from daemon: Could not find the file /tmp/sessions in container oab-sandbox
+```
+
+而同一時間 `docker exec oab-sandbox ls /tmp/sessions` 看得到那些檔案。
+原因是 `docker cp` 讀的是容器的**檔案系統層**（image layers + 可寫層），
+tmpfs 則是核心另外掛上去的獨立掛載點，不屬於那些層。
+
+改成把 tar 從 `docker exec` 的 stdout 串出來就通：
+
+```sh
+docker exec oab-sandbox tar -cf - -C /tmp sessions | tar -xf - -C "$DEST"
+```
+
+在 `--read-only --cap-drop ALL --user 1000:1000` 全開下實測成功。
+
+### 已知代價
+
+- **自己死掉的容器救不到。** `run.sh` 用 `--rm`，OOM 或 crash 的話，容器連同
+  紀錄在 `stop.sh` 跑到之前就消失了——而那正是最需要那份紀錄的時候。
+
+驗收：起一個同樣硬化旗標的測試容器、在 `/tmp/sessions` 寫入兩個 `.jsonl`，
+跑 `./stop.sh` 確認封存內容與寫入一致（含 UTF-8）；另測「容器沒在跑」與
+「容器在跑但沒寫過 session」兩種情況，都不應留下空目錄。
+
+---
+
 ## 目前狀態
 
 | 階段 | 狀態 |
