@@ -36,6 +36,11 @@ __pycache__/
 # belong to this machine, not to the project.
 .claude/settings.local.json
 
+# Worktrees Claude Code creates for isolated sessions. Each one holds a full
+# checkout of this repository, so without this rule a `git add -A` from the
+# shared checkout vendors the repo into itself.
+.claude/worktrees/
+
 # ══════════════════════════════════════════════════════════════════
 # Credentials: never, under any circumstances, in version control.
 #
