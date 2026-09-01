@@ -175,7 +175,7 @@ The fix was two things, and only the first is the obvious one:
 A script that silently guesses wrong is worse than one that crashes, and the
 second fix is what converts one into the other.
 
-`learn/10-cost-script-fix.sh` exercises both cases.
+`learn/dev1-02-cost-script-fix.sh` exercises both cases.
 
 ---
 

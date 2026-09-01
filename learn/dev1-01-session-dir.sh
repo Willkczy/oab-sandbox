@@ -10,7 +10,7 @@
 # Cost           : makes one real Vertex call (about $0.0001)
 # Prerequisites  : oab-proxy and oab-broker must be running (./run.sh, or start
 #                  them by hand)
-# Re-run         : ./learn/09-session-dir.sh [session dir]
+# Re-run         : ./learn/dev1-01-session-dir.sh [session dir]
 #                  no argument means /tmp/sessions
 
 set -e
