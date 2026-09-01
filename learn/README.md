@@ -31,6 +31,7 @@ concept from the walkthrough.
 | `07-context-truncation.sh` | what the `sed` truncation cuts, and why it beats asking the model nicely | context layer |
 | `08-tool-boundary.sh` | the tools' real granularity vs the write boundary AGENTS.md claims | context layer |
 | `10-model-compliance-eval.sh` | compliance as a measurable product property (a re-runnable eval) | context layer |
+| `11-tmpfs-vs-volume.sh` | tmpfs (memory) vs volume (disk): who survives a restart | system layer, basics |
 
 > The "to be written" experiments were all actually run during the walkthrough;
 > they simply have not been turned into scripts yet.
