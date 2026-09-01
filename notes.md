@@ -428,7 +428,7 @@ tmpfs 只留當次容器生命週期的檔，讀下去從 32K token 降到通常
 - 容器停掉，session 歷史就沒了 → `--days N` 在沙箱裡失去意義
 - 重啟後舊 Discord thread 接不回去（`session_ttl_hours = 6` 本來就會過期）
 
-驗收：`./learn/10-cost-script-fix.sh`（兩種情境都測）
+驗收：`./learn/dev1-02-cost-script-fix.sh`（兩種情境都測）
 
 > ⏳ **主機那份真正的 vault 還沒同步。** 這裡改的是 clone。
 

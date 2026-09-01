@@ -11,6 +11,9 @@ concept from the walkthrough.
   `lib/`
 - Nothing changes project state, except the experiments that need containers,
   which start and stop them and say so up front
+- Numeric prefixes follow the main walkthrough. **Side tracks take a word
+  prefix instead** (`chain-`, `dev1-`) so parallel sessions do not collide on
+  the same number
 
 ## Index (in teaching order)
 
@@ -27,8 +30,6 @@ concept from the walkthrough.
 | `06-message-path-to-pi.sh` | how a message travels Discord → openab → pi-acp → pi (ACP over stdio) | architecture |
 | `07-context-truncation.sh` | what the `sed` truncation cuts, and why it beats asking the model nicely | context layer |
 | `08-tool-boundary.sh` | the tools' real granularity vs the write boundary AGENTS.md claims | context layer |
-| `09-session-dir.sh` | whether `--session-dir` really moves the files, and the blast radius | development ① |
-| `10-cost-script-fix.sh` | `pi_cost.py` acceptance across two cases after sessions moved | development ① |
 | `10-model-compliance-eval.sh` | compliance as a measurable product property (a re-runnable eval) | context layer |
 
 > The "to be written" experiments were all actually run during the walkthrough;
@@ -39,3 +40,10 @@ concept from the walkthrough.
 | Script | Topic | Step |
 |---|---|---|
 | `chain-01-command-vs-args.sh` | program name and arguments are two separate slots → why `config/pi-coach` has to exist | step 3 |
+
+## Side track: development ① — moving sessions onto tmpfs (`notes.md`)
+
+| Script | Topic |
+|---|---|
+| `dev1-01-session-dir.sh` | whether `--session-dir` really moves the files, and the blast radius |
+| `dev1-02-cost-script-fix.sh` | `pi_cost.py` acceptance across two cases after sessions moved |
