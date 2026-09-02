@@ -11,10 +11,10 @@
 #                  of staying silent about it
 # Cost           : case A makes one real Vertex call (about $0.0001)
 # Prerequisites  : oab-proxy and oab-broker must be running
-# Re-run         : ./learn/dev1-02-cost-script-fix.sh
+# Re-run         : ./learn/dev/02-cost-script-fix.sh
 
 set -e
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 . learn/lib/project-id.sh
 
 run() {
