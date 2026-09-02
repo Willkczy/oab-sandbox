@@ -108,12 +108,14 @@ memory and pid ceilings are in place.
 
 `learn/` holds small, re-runnable scripts. Each one opens with what it tests, what you
 should expect to see, what it costs, and how to re-run it. They cover context growth
-across turns, truncation behaviour, the tool boundary, session directory resolution,
-and a cross-model instruction-compliance eval.
+across turns, truncation behaviour, the tool boundary, what a restart does to a tmpfs
+versus a volume, session directory resolution, and a cross-model instruction-compliance
+eval. `learn/README.md` indexes all of them in teaching order.
 
-Several of them make a real Vertex call (on the order of $0.0001 each). They resolve the
-GCP project id through `learn/lib/project-id.sh`: `$GOOGLE_CLOUD_PROJECT` if exported,
-otherwise the value in `config/config.toml`, and a hard error if neither is present.
+Most cost nothing. Three make a real Vertex call: two are about $0.0001, and the
+compliance eval is about $0.01 for each model it measures. They resolve the GCP project
+id through `learn/lib/project-id.sh`: `$GOOGLE_CLOUD_PROJECT` if exported, otherwise the
+value in `config/config.toml`, and a hard error if neither is present.
 
 ## Known gaps
 
