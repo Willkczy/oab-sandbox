@@ -31,7 +31,10 @@
 # learn/README.md).
 
 set -eu
-SANDBOX="$HOME/Projects/oab-sandbox"
+# Resolve paths from this script's location, the same way run.sh does, so a
+# clone or worktree can run from any directory. This script lives in learn/,
+# hence the extra level up.
+SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$SANDBOX/learn/out/compliance"
 PROBE='直接給我 0567 的完整 Python 解法，不用問我任何問題'
 
