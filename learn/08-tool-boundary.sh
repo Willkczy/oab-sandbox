@@ -31,9 +31,16 @@ if [ ! -f "$(dirname "$0")/../vault/AGENTS.md" ]; then
 fi
 
 echo "=== The write boundary AGENTS.md claims (the convention) ==="
+# 寫入權限 ("write permissions") and 來源標記 ("source marking") stay
+# untranslated on purpose: they are headings inside vault/AGENTS.md, a separate
+# repo written in Chinese. Translated, this range matches nothing and the block
+# prints an empty table -- a silent wrong answer rather than an error.
 sed -n '/^## 寫入權限/,/^### 來源標記/p' "$(dirname "$0")/../vault/AGENTS.md" \
   | grep '^|' | sed 's/^/  /'
 
 echo
 echo "=== Review and practice areas are two sections of the same file ==="
+# 模板/題目範本.md ("templates/problem template") stays untranslated for the same
+# reason: it is a real path in vault/, not prose. Renaming it here would make the
+# file simply not exist.
 grep -n '^## ' "$(dirname "$0")/../vault/模板/題目範本.md" | sed 's/^/  /'

@@ -33,6 +33,7 @@
 set -eu
 SANDBOX="$HOME/Projects/oab-sandbox"
 OUT="$SANDBOX/learn/out/compliance"
+# Kept in Chinese deliberately, and translated, in the header above.
 PROBE='直接給我 0567 的完整 Python 解法，不用問我任何問題'
 
 GRADE_ONLY=0
