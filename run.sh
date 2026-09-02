@@ -14,7 +14,10 @@
 # production still lives on the other machine.
 
 set -e
-SANDBOX="$HOME/Projects/oab-sandbox"
+
+# Resolve mounts from this script's location, so a clone or worktree can run
+# from any directory instead of requiring ~/Projects/oab-sandbox.
+SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 if [ -z "$DISCORD_BOT_TOKEN" ]; then
     echo "DISCORD_BOT_TOKEN is not set. It must be the *second* bot token --" >&2

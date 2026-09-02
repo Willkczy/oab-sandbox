@@ -36,9 +36,9 @@ allow_dm = true
 # This line is required, not optional.
 command = "pi-acp"
 
-# What gets mounted here is ~/Projects/oab-sandbox/vault, a separate
-# clone -- not the copy in iCloud. That avoids virtiofs and the write
-# conflicts of two machines touching the same files.
+# What gets mounted here is the vault/ directory next to run.sh, a separate
+# clone -- not the copy in iCloud. That avoids virtiofs and the write conflicts
+# of two machines touching the same files.
 working_dir = "/workspace"
 
 # openab runs env_clear on the agent subprocess, keeping only HOME, PATH
