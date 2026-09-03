@@ -1,7 +1,13 @@
 # learn/ — hands-on experiments
 
-Each script is a small experiment you can **re-run and poke at**, matching one
-concept from the walkthrough.
+Each script is a small experiment you can **re-run and poke at**. They come in
+two kinds, and the difference is how you read them, not how important they are:
+
+- **Concepts** (`learn/*.sh`) — read in teaching order, 05 onwards. Each answers
+  *what is this mechanism?* and stands on its own.
+- **Development verifications** (`learn/dev/`) — read next to the change they
+  accepted. Each answers *did that change do what it claimed?*, which only means
+  something alongside the entry in `docs/findings.md` that describes it.
 
 ## Conventions
 
@@ -12,10 +18,13 @@ concept from the walkthrough.
 - Nothing changes project state, except the experiments that need containers,
   which start and stop them and say so up front
 - Numeric prefixes follow the main walkthrough. **Side tracks take a word
-  prefix instead** (`chain-`, `dev1-`) so parallel sessions do not collide on
-  the same number
+  prefix instead** (`chain-`) so parallel sessions do not collide on the same
+  number
+- **Every script is run from the repository root** (`./learn/...`), never from
+  inside `learn/`. They resolve `lib/` relative to the root, so the working
+  directory is part of the contract rather than a convenience
 
-## Index (in teaching order)
+## Concepts — read in teaching order
 
 | Script | Topic | Stage |
 |---|---|---|
@@ -42,9 +51,15 @@ concept from the walkthrough.
 |---|---|---|
 | `chain-01-command-vs-args.sh` | program name and arguments are two separate slots → why `config/pi-coach` has to exist | step 3 |
 
-## Side track: development ① — moving sessions onto tmpfs (`notes.md`)
+## Development verifications — `dev/`
 
-| Script | Topic |
-|---|---|
-| `dev1-01-session-dir.sh` | whether `--session-dir` really moves the files, and the blast radius |
-| `dev1-02-cost-script-fix.sh` | `pi_cost.py` acceptance across two cases after sessions moved |
+These accepted a change rather than taught a concept, so each one is listed with
+the write-up it belongs to. The build log behind them is `notes.md`, which is in
+Chinese; `docs/findings.md` is the English account and the one to read first.
+
+### development ① — moving sessions onto tmpfs
+
+| Script | What it accepted | Written up in |
+|---|---|---|
+| `dev/01-session-dir.sh` | whether `--session-dir` really moves the files, and the blast radius the move was buying | findings #3 |
+| `dev/02-cost-script-fix.sh` | `pi_cost.py` across two cases after sessions moved — including the silent wrong answer | findings #5 |
