@@ -51,12 +51,28 @@ echo
 if [ "$GRADE_ONLY" -eq 0 ]; then
     for m in $MODELS; do
         printf '── %s ' "$m"
-        # The same hardening flags as run.sh; the only difference is an
-        # entrypoint that runs pi -p once and exits. Mounting vault at
-        # /workspace is essential -- AGENTS.md is only loaded from the cwd.
+        # The same hardening flags as run.sh, with two deliberate differences:
+        # an entrypoint that runs pi -p once and exits, and a tmpfs standing in
+        # for run.sh's oab-pi-home volume. The tmpfs is not cosmetic. From pi
+        # 0.84.2 a credential store is opened at start-up and mkdirs ~/.pi/agent
+        # before the ADC chain is ever reached, so on a read-only rootfs with no
+        # writable ~/.pi the run dies with
+        #   Credential store read failed for google-vertex: ENOENT ... mkdir
+        # and produces an empty transcript -- measured against 0.82.1, which got
+        # as far as the token exchange under identical flags. tmpfs rather than
+        # the real volume keeps each probe from carrying state into the next.
+        #
+        # mode=1777 is required, not decoration. Docker gives /tmp that mode by
+        # default but not an arbitrary tmpfs target, so without it the mount
+        # lands root-owned 0755 and the same call fails one step later with
+        # EACCES instead of ENOENT, under --user 1000:1000.
+        #
+        # Mounting vault at /workspace is essential -- AGENTS.md is only loaded
+        # from the cwd.
         docker run --rm \
             --network oab-int --read-only \
             --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --tmpfs /home/node/.pi:rw,noexec,nosuid,size=16m,mode=1777 \
             --cap-drop ALL --security-opt no-new-privileges \
             --user 1000:1000 --pids-limit 256 \
             --memory 2g --memory-swap 2g \
