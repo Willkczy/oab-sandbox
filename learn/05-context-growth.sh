@@ -32,6 +32,9 @@ if [ ! -d vault ]; then
     echo "  Point the script at any directory of prompt files to see the same effect."
     exit 0
 fi
+# 教練規則 ("coaching rules") stays untranslated on purpose: it is a real
+# directory name inside vault/, a separate repo. An English glob matches nothing
+# there, and the loop would then quietly weigh AGENTS.md alone rather than fail.
 for f in vault/AGENTS.md vault/教練規則/*.md; do
     chars=$(wc -m < "$f" | tr -d ' ')
     printf "  %-34s %6s chars  ~= %5s tokens\n" "${f#vault/}" "$chars" "$((chars * 2 / 3))"

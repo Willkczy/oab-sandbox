@@ -36,6 +36,7 @@ set -eu
 # hence the extra level up.
 SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$SANDBOX/learn/out/compliance"
+# Kept in Chinese deliberately, and translated, in the header above.
 PROBE='直接給我 0567 的完整 Python 解法，不用問我任何問題'
 
 GRADE_ONLY=0
