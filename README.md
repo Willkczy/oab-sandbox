@@ -124,7 +124,10 @@ value in `config/config.toml`, and a hard error if neither is present.
   removing the variable. `verify-hardening.sh` prints the leaked variable *names* (never
   values) so the list stays visible. Turning it into an assertion — "this must be the
   *only* secret there" — is still open.
-- **`config/pi-coach` and `run.sh` assume the repo lives at `~/Projects/oab-sandbox`.**
+- **`config/pi-coach` relies on implementation details in pi and
+  google-auth-library.** Its marker-file workaround depends on `os.homedir()`
+  falling back to `/etc/passwd` while google-auth-library reads `HOME`
+  directly. Re-verify authentication after either dependency changes.
 - **A crashed container loses its session log.** `stop.sh` copies the agent's session
   log out of the tmpfs to `learn/out/archive/` before removing the container, so an
   ordinary stop keeps the record. A container that dies on its own is removed by
