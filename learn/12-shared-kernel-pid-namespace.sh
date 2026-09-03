@@ -50,23 +50,26 @@ docker exec "$NAME" ps -eo pid,args | sed 's/^/    /'
 
 echo
 echo "  from the host's PID namespace:"
-# TODO(human): print the line for that same sleep process as the host sees it.
+# There are two ways to ask this, and the choice is a teaching one rather than a
+# technical one. `docker inspect -f '{{.State.Pid}}'` returns the same number,
+# but it is Docker reporting what it recorded. Reading the host's own process
+# table returns the same `pid,args` shape as the block above, so the two lines
+# differ in one column and nothing else -- which is the whole point being made.
 #
-# What you have to work with:
-#   - the container is named "$NAME" and is running `sleep $SLEEP_SECS`
-#   - `docker run --rm --pid=host alpine ps -eo pid,args` lists every process
-#     in the host's namespace (about 190 of them, so it needs narrowing)
-#   - `docker inspect` also knows things about a running container
+# SLEEP_SECS is distinctive on purpose so this pattern stays specific; the
+# leading space and trailing anchor keep it from also matching a `sleep 470`.
 #
-# Print one line, indented four spaces to match the block above, showing the
-# host-side PID of that sleep. Leave HOST_VIEW empty if nothing matched, so the
-# check below can report an honest failure rather than a blank.
-HOST_VIEW=""
+# `|| true` is not optional here: set -e would abort the script on a grep that
+# matches nothing, and matching nothing is the exact case the branch below
+# exists to report honestly.
+HOST_VIEW=$(docker run --rm --pid=host alpine ps -eo pid,args \
+    | grep " sleep $SLEEP_SECS\$" || true)
 
 if [ -n "$HOST_VIEW" ]; then
     echo "$HOST_VIEW" | sed 's/^/    /'
 else
-    echo "    (nothing matched -- see the handoff comment above)"
+    echo "    (nothing matched -- the sleep may already have exited; raise"
+    echo "     SLEEP_SECS and re-run)"
 fi
 
 echo
