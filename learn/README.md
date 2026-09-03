@@ -28,7 +28,6 @@ two kinds, and the difference is how you read them, not how important they are:
 
 | Script | Topic | Stage |
 |---|---|---|
-| *(to be written)* | shared kernel, PID namespace | system layer, basics |
 | *(to be written)* | capabilities: CapEff vs CapBnd | S2 |
 | *(to be written)* | no_new_privs, read-only, noexec | S2 |
 | *(to be written)* | cgroup memory and process ceilings | S2 |
@@ -41,6 +40,7 @@ two kinds, and the difference is how you read them, not how important they are:
 | `08-tool-boundary.sh` | the tools' real granularity vs the write boundary AGENTS.md claims | context layer |
 | `10-model-compliance-eval.sh` | compliance as a measurable product property (a re-runnable eval) | context layer |
 | `11-tmpfs-vs-volume.sh` | tmpfs (memory) vs volume (disk): who survives a restart | system layer, basics |
+| `12-shared-kernel-pid-namespace.sh` | one kernel under every container, and a PID namespace as a renumbered view of it | system layer, basics |
 
 > The "to be written" experiments were all actually run during the walkthrough;
 > they simply have not been turned into scripts yet.
