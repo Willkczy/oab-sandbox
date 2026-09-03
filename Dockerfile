@@ -13,15 +13,28 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# The base image pins pi 0.79.9, whose @earendil-works/pi-ai model list stops at
-# gemini-3.5-flash. 3.6-flash is the only model that both held the coaching rules
-# under test and came in cheaper than pro, so this bump is not optional.
+# This layer is the gate on model selection. pi's model catalogue is a static
+# JSON file compiled into @earendil-works/pi-ai, not something fetched from
+# Vertex at run time, so the npm version decides which models config/pi-coach is
+# allowed to name at all. The base image pins pi 0.79.9, whose list stops at
+# gemini-3.5-flash.
 #
-# The upgrade risk is known to be zero: pi 0.82.1 with pi-acp 0.0.31 was measured
-# on the main machine and the ACP handshake completes in 211ms, so there is
-# nothing a downgrade comparison would tell us. pi-acp itself stays at the base
-# image's 0.0.31.
-ARG PI_VERSION=0.82.1
+# 0.84.2 is the earliest release whose catalogue
+# (dist/providers/data/google-vertex.json) contains gemini-3.7-flash; 0.83.0,
+# 0.84.0 and 0.84.1 all stop at 3.6-flash. Do not trust the number alone:
+# pi-coding-agent depends on pi-ai ^0.84.2, so a later rebuild can resolve a
+# newer catalogue than this pin suggests. Read the list out of the built image
+# instead:
+#
+#   docker run --rm --network none --entrypoint sh oab-sandbox:pi -c \
+#     'grep -rho "gemini-3\.[0-9]-flash" /usr/local/lib/node_modules/@earendil-works | sort -u'
+#
+# Unlike the 0.79.9 -> 0.82.1 bump, this one is NOT backed by a handshake
+# measurement: pi 0.84.2 against the base image's pi-acp 0.0.31 has not been
+# tested here. pi-acp itself still stays at the base image's 0.0.31, so if the
+# agent stops responding after this bump, an ACP version mismatch is the first
+# thing to check.
+ARG PI_VERSION=0.84.2
 RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
 
 USER node

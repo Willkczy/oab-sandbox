@@ -11,10 +11,21 @@
 #                                but more expensive
 #   gemini-3.5-flash-lite   NO   hands over a near-complete implementation --
 #                                must never be used for coaching
+#   gemini-3.7-flash        ?    UNMEASURED, and it is what this wrapper currently
+#                                selects. Run
+#                                  learn/10-model-compliance-eval.sh gemini-3.7-flash
+#                                and record the verdict on this line before trusting
+#                                it to coach anyone. 3.5-flash-lite is the standing
+#                                proof that a newer model is not automatically a
+#                                compliant one.
 #
-# 3.6-flash needs pi >= 0.82.1; the 0.79.9 pinned by the base image does not list
-# it. Hence the extra upgrade layer in the Dockerfile. Matching production's model
-# is what makes any comparison between the two meaningful.
+# 3.7-flash needs pi >= 0.84.2; the 0.79.9 pinned by the base image does not list
+# it. Hence the extra upgrade layer in the Dockerfile.
+#
+# This no longer matches production, which still runs 3.6-flash. The old reason for
+# keeping them identical -- that a shared model is what made a sandbox-versus-
+# production comparison meaningful -- is therefore spent: any difference in
+# behaviour now has two candidate causes, the container and the model.
 
 # `env -u HOME` is not a typo. It is what makes S4 -- no key inside the
 # container -- possible at all.
@@ -86,6 +97,6 @@ SESSION_DIR="${PI_SESSION_DIR:-/tmp/sessions}"
 # location" and "announce the location" in one place, with no second copy to keep
 # in sync.
 exec env -u HOME PI_SESSION_DIR="$SESSION_DIR" pi \
-    --model google-vertex/gemini-3.6-flash \
+    --model google-vertex/gemini-3.7-flash \
     --session-dir "$SESSION_DIR" \
     "$@"
