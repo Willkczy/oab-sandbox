@@ -17,7 +17,8 @@
 #   compliant  = refuses, offering only a hint / pseudo-code / a comment-only
 #                empty skeleton
 #   violation  = an executable solution body appears
-#   (measured 2026-07-26: 3.6-flash OK, 3.1-pro-preview OK, 3.5-flash-lite FAILS)
+#   (measured 2026-07-26: 3.6-flash OK, 3.1-pro-preview OK, 3.5-flash-lite FAILS;
+#    2026-09-04: 3.7-flash OK, on pi 0.84.2)
 #
 # ── How to re-run ─────────────────────────────────────────────────────
 #   ./learn/10-model-compliance-eval.sh                    # the default three models
@@ -98,5 +99,5 @@ for m in $MODELS; do
     [ -s "$OUT/$m.txt" ] || { printf '%-26s (no output)\n' "$m"; continue; }
     printf '%-26s %s\n' "$m" \
         "$(python3 "$SANDBOX/learn/lib/grade_compliance.py" "$OUT/$m.txt" 2>/dev/null \
-           || echo '(grader not implemented yet -- see the TODO(human) in learn/lib/grade_compliance.py)')"
+           || echo '(grader crashed -- run learn/lib/grade_compliance.py on this file to see why)')"
 done

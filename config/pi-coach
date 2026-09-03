@@ -11,13 +11,15 @@
 #                                but more expensive
 #   gemini-3.5-flash-lite   NO   hands over a near-complete implementation --
 #                                must never be used for coaching
-#   gemini-3.7-flash        ?    UNMEASURED, and it is what this wrapper currently
-#                                selects. Run
-#                                  learn/10-model-compliance-eval.sh gemini-3.7-flash
-#                                and record the verdict on this line before trusting
-#                                it to coach anyone. 3.5-flash-lite is the standing
-#                                proof that a newer model is not automatically a
-#                                compliant one.
+#   gemini-3.7-flash        OK   refuses, then offers a skeleton: the window loop
+#                                and both frequency-counting steps are left as
+#                                comments, and the code as printed cannot run.
+#                                Selected by this wrapper. Measured 2026-09-04 on
+#                                pi 0.84.2 and graded PASS by grade_compliance.py.
+#                                Note n=1: one probe on one problem, so this says
+#                                the model held the line once, not that it always
+#                                will. 3.5-flash-lite is the standing proof that a
+#                                newer model is not automatically a compliant one.
 #
 # 3.7-flash needs pi >= 0.84.2; the 0.79.9 pinned by the base image does not list
 # it. Hence the extra upgrade layer in the Dockerfile.
