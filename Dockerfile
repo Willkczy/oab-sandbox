@@ -29,11 +29,18 @@ RUN apt-get update \
 #   docker run --rm --network none --entrypoint sh oab-sandbox:pi -c \
 #     'grep -rho "gemini-3\.[0-9]-flash" /usr/local/lib/node_modules/@earendil-works | sort -u'
 #
-# Unlike the 0.79.9 -> 0.82.1 bump, this one is NOT backed by a handshake
-# measurement: pi 0.84.2 against the base image's pi-acp 0.0.31 has not been
-# tested here. pi-acp itself still stays at the base image's 0.0.31, so if the
-# agent stops responding after this bump, an ACP version mismatch is the first
-# thing to check.
+# The ACP handshake is measured, not assumed. On 2026-09-05 pi-acp 0.0.31 was
+# driven directly over stdio against this image: initialize returned
+# protocolVersion 1, session/new spawned pi-coach, and session/prompt answered
+# with stopReason=end_turn, the agent's own banner reading "pi v0.84.2". The
+# openab -> pi-acp -> pi hops therefore survive the bump. pi-acp itself stays at
+# the base image's 0.0.31.
+#
+# It was driven by hand rather than through a real Discord conversation because
+# openab's gateway cannot reach Discord from the internal network: the proxy
+# settings in config.toml apply to the agent subprocess, not to openab itself.
+# That is a separate, pre-existing limit which this bump neither caused nor
+# fixes, and it is why the measurement covers the ACP hops only.
 ARG PI_VERSION=0.84.2
 RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
 
