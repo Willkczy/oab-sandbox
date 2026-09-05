@@ -13,15 +13,35 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# The base image pins pi 0.79.9, whose @earendil-works/pi-ai model list stops at
-# gemini-3.5-flash. 3.6-flash is the only model that both held the coaching rules
-# under test and came in cheaper than pro, so this bump is not optional.
+# This layer is the gate on model selection. pi's model catalogue is a static
+# JSON file compiled into @earendil-works/pi-ai, not something fetched from
+# Vertex at run time, so the npm version decides which models config/pi-coach is
+# allowed to name at all. The base image pins pi 0.79.9, whose list stops at
+# gemini-3.5-flash.
 #
-# The upgrade risk is known to be zero: pi 0.82.1 with pi-acp 0.0.31 was measured
-# on the main machine and the ACP handshake completes in 211ms, so there is
-# nothing a downgrade comparison would tell us. pi-acp itself stays at the base
-# image's 0.0.31.
-ARG PI_VERSION=0.82.1
+# 0.84.2 is the earliest release whose catalogue
+# (dist/providers/data/google-vertex.json) contains gemini-3.7-flash; 0.83.0,
+# 0.84.0 and 0.84.1 all stop at 3.6-flash. Do not trust the number alone:
+# pi-coding-agent depends on pi-ai ^0.84.2, so a later rebuild can resolve a
+# newer catalogue than this pin suggests. Read the list out of the built image
+# instead:
+#
+#   docker run --rm --network none --entrypoint sh oab-sandbox:pi -c \
+#     'grep -rho "gemini-3\.[0-9]-flash" /usr/local/lib/node_modules/@earendil-works | sort -u'
+#
+# The ACP handshake is measured, not assumed. On 2026-09-05 pi-acp 0.0.31 was
+# driven directly over stdio against this image: initialize returned
+# protocolVersion 1, session/new spawned pi-coach, and session/prompt answered
+# with stopReason=end_turn, the agent's own banner reading "pi v0.84.2". The
+# openab -> pi-acp -> pi hops therefore survive the bump. pi-acp itself stays at
+# the base image's 0.0.31.
+#
+# It was driven by hand rather than through a real Discord conversation because
+# openab's gateway cannot reach Discord from the internal network: the proxy
+# settings in config.toml apply to the agent subprocess, not to openab itself.
+# That is a separate, pre-existing limit which this bump neither caused nor
+# fixes, and it is why the measurement covers the ACP hops only.
+ARG PI_VERSION=0.84.2
 RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
 
 USER node
