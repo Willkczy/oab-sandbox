@@ -230,18 +230,97 @@ wrong is to score a violation as a pass.
 
 ---
 
+## 8. One library honoured the proxy and the other ignored it, in the same process
+
+The plan assumed a container with no route out and one proxy in front of it is a
+single, uniform gate. It is not. Whether traffic goes through a proxy is decided
+by each library independently, and nothing enforces agreement.
+
+Starting the sandbox with a real bot token produced this, and nothing else:
+
+```
+INFO openab: starting discord adapter ... users=1 allow_dm=true
+INFO openab: discord bot running
+```
+
+The bot was offline and answered nothing. There was no error at any level openab
+logs by default.
+
+Two causes were stacked, and the first hid the second completely:
+
+1. **openab's own process had no proxy variables at all.** `HTTPS_PROXY` is set
+   in `config.toml` under `[agent] env`, which openab passes to the *agent
+   subprocess* — pi — and not to itself. On an `--internal` network that leaves
+   openab unable to resolve `discord.com`.
+2. **serenity is two clients, not one.** Its REST half rides `reqwest`, which
+   reads the proxy environment. Its gateway half rides `tokio-tungstenite`,
+   which has no proxy support at all: it accepts an already-proxied TCP stream
+   or nothing.
+
+`learn/13-discord-gateway-proxy.sh` separates them by running the same container
+twice, with and without the variables. With them, one process does both of these
+within the same second:
+
+```
+reqwest::connect: proxy(http://…:3128/) intercepts 'https://discord.com/'
+hyper_util::client::legacy::pool: pooling idle connection for ("https", discord.com)
+
+serenity::gateway::bridge::shard_queuer: Err starting shard 0:
+  Tungstenite(Io(Custom { error: "failed to lookup address information:
+  Temporary failure in name resolution" }))
+```
+
+The REST half completed through squid. The gateway half tried to resolve the
+hostname itself — which is precisely what a client that has not looked at the
+proxy configuration does — and failed, then retried every five seconds forever.
+
+This is not a misconfiguration. Upstream openab documents the same limitation
+against another sandbox platform in `docs/openshell.md`: *"Unless OAB's
+networking layer is refactored to be fully HTTP/HTTPS proxy-aware (tunneling WSS
+through the L7 proxy), the integration cannot function."*
+
+Two things about the measurement itself were as surprising as the result:
+
+- **squid's `access.log` is empty for a request that succeeded.** squid writes a
+  CONNECT tunnel's line when the tunnel *closes*, and reqwest keeps its
+  connection pooled and open. The first version of this experiment counted lines
+  there and reported "nothing happened" for a request that plainly had.
+- **The shape of a fake token changes what gets measured.** serenity validates
+  the token format locally — three dot-separated parts — and refuses anything
+  else before opening a socket. A free-text placeholder therefore produces the
+  same silent, error-free log as a network failure. A well-shaped invalid token
+  reaches the wire; a malformed one never leaves the process.
+
+Both belong with finding 5: the failure that looks like success is the expensive
+one. The experiment needs no valid token, because serenity fetches the gateway
+URL from the *unauthenticated* `GET /gateway`.
+
+Four ways out, in order of how much they cost the "exactly one gate" property:
+
+| Option | Keeps one gate? | Cost |
+|---|---|---|
+| socat `PROXY` relay + `--add-host` | yes | one small container; a spoofed DNS answer that breaks if Discord renames the gateway host |
+| `proxychains-ng` (`LD_PRELOAD`) | yes | rewrites `connect()` for the whole process; must exclude the proxy and broker |
+| agent container also joins `oab-ext` | **no** | the agent gets an unmonitored route out — the property this repo exists to demonstrate |
+| patch openab upstream | yes | `client_async_tls_with_config` accepts a pre-proxied stream; means maintaining a fork |
+
+`redsocks` and iptables redirection are excluded outright: they need `NET_ADMIN`,
+which contradicts `--cap-drop ALL`.
+
+---
+
 ## Still open
 
 - **A crash takes the session log with it.** `stop.sh` archives the log before
   removing the container, which covers an ordinary stop. A container that dies on
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
-- **Whether Discord's gateway survives the proxy.** serenity uses
-  `async-tungstenite`, which is not expected to honour proxy environment
-  variables. If it does not, the agent container has to join `oab-ext` as well —
-  giving up the "exactly one gate" property — or the setup stays as verified
-  today. This is the only remaining question that could still change the
-  architecture.
+- **Which way out to take for the Discord gateway.** Finding 8 settles *why* it
+  fails and rules the question out as a misconfiguration; it does not choose a
+  remedy. The socat relay is the only option that both restores the bot and
+  keeps the single-gate property, and it has not been built or measured. Until
+  one is chosen, the Discord front-end does not work from inside this sandbox
+  and the agent is exercised over ACP directly.
 - **Turning the `/proc/1/environ` check into an assertion**, so that the presence
   of any secret beyond `DISCORD_BOT_TOKEN` fails the run.
 - **Caller identity at the broker.** It currently issues tokens to anything on

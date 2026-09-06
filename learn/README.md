@@ -41,6 +41,7 @@ two kinds, and the difference is how you read them, not how important they are:
 | `10-model-compliance-eval.sh` | compliance as a measurable product property (a re-runnable eval) | context layer |
 | `11-tmpfs-vs-volume.sh` | tmpfs (memory) vs volume (disk): who survives a restart | system layer, basics |
 | `12-shared-kernel-pid-namespace.sh` | one kernel under every container, and a PID namespace as a renumbered view of it | system layer, basics |
+| `13-discord-gateway-proxy.sh` | why one process obeys the proxy over REST and ignores it over websocket | S3 (open issue) |
 
 > The "to be written" experiments were all actually run during the walkthrough;
 > they simply have not been turned into scripts yet.
