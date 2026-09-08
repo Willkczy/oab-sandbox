@@ -494,13 +494,95 @@ docker exec oab-sandbox tar -cf - -C /tmp sessions | tar -xf - -C "$DEST"
 | S2 Docker 硬化 | ✅ 已驗（pi 路徑） |
 | S3 網路限縮 | ✅ 已驗（pi-only，即計劃的 fallback B） |
 | S4 金鑰不進容器 | ✅ 已驗 |
-| Discord 端到端 | ⏳ 等 bot token |
+| Discord 端到端 | ❌ 走不通，原因已量測（見下節 2026-09-06） |
 
 `./run.sh` 把三個容器整組拉起來，`./stop.sh` 收掉。
 
-### 仍未驗的一件事
+---
 
-**Discord gateway 過不過得了 squid。** serenity 走 `async-tungstenite`，
-預期不吃 proxy 環境變數。若不過，agent 容器得同時接 `oab-ext`
-（等於放棄「唯一閘門」，Discord 直連），或維持現在的 pi-only 驗證方式。
-**這是唯一還可能要改架構的地方。**
+## Discord gateway：從「預期不過」到量測完成（2026-09-04 / 09-06）
+
+原本這裡寫的是「仍未驗的一件事：Discord gateway 過不過得了 squid，預期不過」。
+現在兩件事都做完了——**真的跑過，而且量出斷在哪一層**。
+
+### 🔴 2026-09-04：真的失敗了，但沒有人把它寫下來
+
+那天用真的第二支 bot token 跑 `./run.sh`。openab 印出：
+
+```
+INFO openab: config loaded agent_cmd=pi-acp pool_max=3 discord=true
+INFO openab: starting discord adapter ... users=1 allow_dm=true
+INFO openab: discord bot running          ← 這行是騙人的
+```
+
+**一個錯誤都沒有**，但 bot 在 Discord 上是灰色離線，訊息完全沒反應。
+
+當場查到三項證據：openab 自己的環境變數只有 `DISCORD_BOT_TOKEN`（沒有任何
+proxy）、容器內解析 `discord.com` 得到 `EAI_AGAIN`、squid 本身可達。
+
+那次的主線任務是換模型，這個發現被正確判定「不是本分支造成的」，於是沒進 PR #10
+——**然後就沒有回寫到這裡**。AGENTS.md 明明有規則（「something surprising… goes
+into notes.md **as it happens, with the date**」），規則沒被執行。結果是 `notes.md`
+和 `docs/findings.md` 又掛了兩天的「⏳ 等 bot token」，而 token 早就有了、也早就
+測過了。這是這次要補的第一件事。
+
+### 為什麼那次只證到一半
+
+失敗有兩層疊在一起，而 `EAI_AGAIN` 只證明了第一層：
+
+| 層 | 內容 |
+|---|---|
+| 1 | `HTTPS_PROXY` 寫在 `config.toml` 的 `[agent] env`，那是 openab 給 **pi 子行程**的環境變數，openab 自己沒有。在 `--internal` 網路上連 DNS 都做不到。 |
+| 2 | 就算補上，serenity 是**分成兩半**的：REST 走 `reqwest`（讀 proxy 環境變數），gateway 走 `tokio-tungstenite`（**完全不支援 proxy**）。 |
+
+第一層把第二層整個遮住了，所以那天測不出來第二層。
+
+### ✅ 2026-09-06：`learn/13-discord-gateway-proxy.sh`，兩層都量掉
+
+同一個容器跑兩次，唯一差別是有沒有給 openab proxy 環境變數。關鍵是
+`RUST_LOG=debug`——**預設等級下整個失敗是隱形的**，因為 serenity 把 shard 錯誤記在
+retry 迴圈裡的 WARN，而 openab 自己那行 INFO 兩種情況都照印 `discord bot running`。
+
+arm B（有 proxy 變數）的 log：
+
+```
+reqwest::connect: proxy(http://oab-t13-proxy:3128/) intercepts 'https://discord.com/'
+hyper_util: connected to 172.22.0.2:3128
+hyper_util::pool: pooling idle connection for ("https", discord.com)   ← REST 穿過 squid 了
+...
+serenity::gateway::bridge::shard_queuer: Err starting shard 0:
+    Tungstenite(Io(Custom { error: "failed to lookup address information:
+    Temporary failure in name resolution" }))                          ← gateway 沒有
+```
+
+結論：**第一層成立且一個環境變數就能修；第二層成立**——tungstenite 自己去做 DNS，
+代表它根本沒看 proxy 設定。serenity 的錯誤訊息裡直接指名 `Tungstenite`。
+
+而且**這個實驗不需要有效 token**。serenity 拿 gateway URL 用的是**不需認證的**
+`GET /gateway`，所以 REST 那一跳跟 token 有沒有效無關；接在後面的 gateway 嘗試
+就是第二層要測的東西。腳本用一個「格式正確但無效」的假 token 就跑得完。
+
+### 🔴 兩個踩到的量測陷阱
+
+**(a) squid 的 access.log 對長連線是空的。** squid 是在 CONNECT 隧道**關閉**時才寫
+log，而 reqwest 會把連線 pool 起來保持開啟。所以第一版腳本數 access.log 行數，對一
+個明明成功的請求報出「什麼都沒發生」。改用 openab 自己的 debug log 才量得準。
+
+**(b) 假 token 的「格式」會改變測到的東西。** serenity 會先在本地驗證 token 形狀
+（三段、用 `.` 分隔），不合格就**連 socket 都不開**。第一版用了自由文字當
+placeholder，結果測到的是「serenity 本地擋掉」而不是「網路不通」——而 log 長得
+一模一樣，照樣印 `discord bot running`。
+
+這兩個都是同一類：**看起來完成了、其實什麼都沒測到**，跟 `pi_cost.py` 那次靜默報
+舊數字是同一種病。
+
+### 現在的選項
+
+第二層確認之後，`oab-ext` 直連不再是唯一解。上游 `openabdev/openab` 的
+`docs/openshell.md` 自己承認了這個限制（「Unless OAB's networking layer is
+refactored to be fully HTTP/HTTPS proxy-aware (tunneling WSS through the L7
+proxy), the integration cannot function.」），所以這不是設定錯誤，是已知架構限制。
+
+可行的四條路寫在 `docs/findings.md` 那一則裡。其中最值得試的是用 socat 的 `PROXY`
+位址型別做一個 CONNECT 中繼：它只搬 bytes、不拆 TLS，所以憑證照樣端到端驗得過，
+流量仍然走 squid，**「唯一閘門」這條性質保得住**。

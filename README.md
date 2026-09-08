@@ -109,8 +109,9 @@ memory and pid ceilings are in place.
 `learn/` holds small, re-runnable scripts. Each one opens with what it tests, what you
 should expect to see, what it costs, and how to re-run it. They cover context growth
 across turns, truncation behaviour, the tool boundary, what a restart does to a tmpfs
-versus a volume, session directory resolution, and a cross-model instruction-compliance
-eval. `learn/README.md` indexes all of them in teaching order.
+versus a volume, session directory resolution, why an egress proxy is not a uniform
+gate, and a cross-model instruction-compliance eval. `learn/README.md` indexes all of
+them in teaching order.
 
 Most cost nothing. Three make a real Vertex call: two are about $0.0001, and the
 compliance eval is about $0.01 for each model it measures. They resolve the GCP project
@@ -119,6 +120,14 @@ value in `config/config.toml`, and a hard error if neither is present.
 
 ## Known gaps
 
+- **The Discord front-end does not work from inside this sandbox.** openab's
+  Discord gateway is a websocket, and the library behind it
+  (`tokio-tungstenite`) has no proxy support, so it cannot cross the egress
+  gate — while serenity's REST half, on `reqwest`, crosses it fine. The bot
+  starts, logs `discord bot running`, and stays offline. Upstream documents the
+  same limitation. Until a relay is built the agent is driven over ACP directly;
+  see [finding 8](docs/findings.md) and `learn/13-discord-gateway-proxy.sh`,
+  which measures both halves and needs no bot token.
 - **`/proc/1/environ` is readable by the agent's own child processes**, which exposes
   `DISCORD_BOT_TOKEN` — the bot cannot function without it, so this is not fixable by
   removing the variable. `verify-hardening.sh` prints the leaked variable *names* (never
