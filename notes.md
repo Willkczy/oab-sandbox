@@ -586,3 +586,65 @@ proxy), the integration cannot function.」），所以這不是設定錯誤，�
 可行的四條路寫在 `docs/findings.md` 那一則裡。其中最值得試的是用 socat 的 `PROXY`
 位址型別做一個 CONNECT 中繼：它只搬 bytes、不拆 TLS，所以憑證照樣端到端驗得過，
 流量仍然走 squid，**「唯一閘門」這條性質保得住**。
+
+---
+
+## 🔴 allowlist 少了 `.discord.gg`——而且 `learn/13` 不可能測到它（2026-09-08）
+
+上一節結論說 socat 中繼最值得試。準備動手時重讀 `proxy/squid.conf`，發現一個
+會讓那條路直接撞牆的東西：
+
+```
+# squid.conf:22
+acl allowed_domains dstdomain .googleapis.com .discord.com .discordapp.net .discordapp.com
+```
+
+**`.discord.gg` 不在裡面。** 而 gateway 就在那個網域下——直接問 Discord 自己：
+
+```console
+$ curl -sS https://discord.com/api/v10/gateway
+{"url":"wss://gateway.discord.gg"}
+```
+
+（這正是 serenity 用來拿 websocket URL 的那個**不需認證**端點，所以查它不用 token。）
+
+結尾是 `.gg` 不是 `.com`，`.discord.com` 那條規則涵蓋不到，於是會落到
+`http_access deny all`（`squid.conf:55`）。
+
+### 為什麼 `learn/13` 測不出來
+
+不是腳本寫得不好。arm B 裡 `tokio-tungstenite` 是在**本機 DNS 解析**那一步就失敗
+的，它從來沒有把任何封包送到 squid——**squid 的 allowlist 根本沒有參與那次實驗**。
+
+所以這是「沒被測到」，不是「測過了沒問題」。兩者在證據上完全不同，而它們長得一樣：
+都是「沒有出現相關的錯誤」。又一次 finding 5。
+
+### 🔴 真正麻煩的地方：它會偏袒最糟的選項
+
+這不只是「還要多改一行」。在沒補 allowlist 的狀態下逐一去試 finding 8 的四條路：
+
+| 選項 | 會觀察到什麼 |
+|---|---|
+| A（socat）／B（proxychains）／D（patch 上游） | 流量**真的走進 squid** → 撞上 `deny all` → 看起來像「這個方法沒用」 |
+| C（agent 直接接 `oab-ext`） | **完全繞過 squid** → 立刻成功，而且只要一行指令 |
+
+也就是說，環境會**主動製造證據**去支持那個唯一放棄「唯一閘門」的選項，而讓三個
+保住它的選項看起來都失敗。
+
+**所以補 allowlist 不是可以延後的細節，它是讓其他三條路有機會被公平評估的前提。**
+動 socat 之前先做這件事。
+
+一般化的教訓：要比較幾個方案時，先確認失敗的原因不是來自**所有方案共用的那一段**。
+否則比的不是方案本身，是誰比較能繞過那個共用瓶頸——而最能繞過的，往往正是最不該
+選的那個。
+
+### 補的時候要注意
+
+照這個檔案自己的先例（`squid.conf:34` 解釋為什麼寫 `r.jina.ai` 而不是 `.jina.ai`）：
+**只加 `gateway.discord.gg` 這一個主機名，不要加 `.discord.gg` 整個網域。**
+
+另外，這裡確認的是 Discord 在 `GET /gateway` 上**公告**的主機名。socat 方案要把它
+寫死在 `--add-host` 或 network alias 裡，所以對方哪天改主機名那條假 DNS 就會失效
+——這個脆弱性沒有因為主機名被確認而消失。
+
+> 尚未動手。`squid.conf` 還沒改，socat 也還沒建。
