@@ -1,11 +1,20 @@
 # oab-sandbox
 
-A hardened container sandbox for running a coding agent with a Discord front-end.
+An LLM coach for algorithm practice, and the hardened container it runs in.
 
-The design goal is narrow and testable: **the service-account private key must never
-exist inside the container that runs the agent.** Everything else — the read-only
-rootfs, the dropped capabilities, the egress allowlist — exists to make that one
-guarantee hold even after the agent itself is assumed compromised.
+The agent is `pi`, a general coding agent, pointed at an Obsidian vault of algorithm
+problems and told by the vault's own `AGENTS.md` to coach rather than solve: never hand
+over a solution, one tier of hint at a time, every review backed by something the
+student actually wrote. None of those rules has a system layer behind it, so this repo
+measures them instead of trusting them — `learn/10-model-compliance-eval.sh` is re-run
+after every model change, and finding 6 records what it caught.
+
+The container around the agent has one narrow, testable design goal: **the
+service-account private key must never exist inside the container that runs the
+agent.** Everything else — the read-only rootfs, the dropped capabilities, the egress
+allowlist — exists to make that one guarantee hold even after the agent itself is
+assumed compromised. The front-end is Discord, through openab; that path currently
+stops at the egress gate (finding 8), so the agent is driven over ACP directly.
 
 Every hardening flag in `run.sh` was verified empirically, and `verify-hardening.sh`
 re-checks them. Findings that contradicted the original plan were written down rather
@@ -13,6 +22,15 @@ than quietly fixed — including the ones still unresolved. See
 [docs/findings.md](docs/findings.md), which is the most interesting document here:
 an existence check that never reads the file, a permission table nothing enforces,
 and a script that reported a week-old number without ever erroring.
+
+## If you have five minutes
+
+1. [docs/findings.md](docs/findings.md) — the eight findings. Start here.
+2. [`learn/10-model-compliance-eval.sh`](learn/10-model-compliance-eval.sh) — the
+   header says why the coaching rule can only be measured, never enforced.
+   [`learn/lib/grade_compliance.py`](learn/lib/grade_compliance.py) says where the
+   line between a hint and a solution is drawn, and why it is not a line count.
+3. [Known gaps](#known-gaps) — what is still open, including the Discord path above.
 
 ## Architecture
 
