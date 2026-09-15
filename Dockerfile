@@ -19,6 +19,11 @@ RUN apt-get update \
 # allowed to name at all. The base image pins pi 0.79.9, whose list stops at
 # gemini-3.5-flash.
 #
+# One qualification, found on 2026-09-15. pi 0.84.2 also overlays a remote
+# catalogue from pi.dev, refreshed in the background whenever it starts in rpc
+# mode. squid denies pi.dev, so inside the sandbox the compiled list is still the
+# whole list. On a machine without the gate, models can appear without an upgrade.
+#
 # 0.84.2 is the earliest release whose catalogue
 # (dist/providers/data/google-vertex.json) contains gemini-3.7-flash; 0.83.0,
 # 0.84.0 and 0.84.1 all stop at 3.6-flash. Do not trust the number alone:

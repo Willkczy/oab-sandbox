@@ -69,3 +69,10 @@ Chinese; `docs/findings.md` is the English account and the one to read first.
 |---|---|---|
 | `dev/01-session-dir.sh` | whether `--session-dir` really moves the files, and the blast radius the move was buying | findings #3 |
 | `dev/02-cost-script-fix.sh` | `pi_cost.py` across two cases after sessions moved — including the silent wrong answer | findings #5 |
+
+### development ③ — what the first real Discord conversation exposed
+
+| Script | What it accepted | Written up in |
+|---|---|---|
+| `dev/03-stale-service-containers.sh` | `run.sh` recreating a service whose image, arguments or config changed, instead of silently reusing it | findings #8 |
+| `dev/04-openab-state-volume.sh` | openab's state volume writable by uid 1000, including one Docker had already created root-owned | findings #8 |

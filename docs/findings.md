@@ -242,6 +242,13 @@ Four samples, one of them informative.
   /tmp/sessions in container` while `docker exec ls` lists the files at that very
   path. Streaming a tar out of `docker exec` crosses that boundary, which is how
   `stop.sh` archives the session log.
+- **A named volume takes its owner from the image, or from nobody.** Docker
+  copies the ownership of an image directory onto an empty named volume mounted
+  over it. `~/.pi` existed in the base image, owned by `node`, so its volume was
+  writable. `~/.openab` did not, so Docker created the mount point as root, and
+  openab, running as uid 1000, lost its thread map and reminders at every restart
+  while logging only a WARN. Creating the directory in the Dockerfile fixed new
+  volumes and the existing empty one alike; `learn/dev/04` checks both.
 
 ---
 
@@ -382,8 +389,9 @@ checkout was still on `main` and had never re-read its configuration, so every
 gateway `CONNECT` got `TCP_DENIED/403`, retried every five seconds, while openab
 printed `discord bot running`. The file inside the container was already the new
 one; squid's `cache.log` showed it had been processed exactly once, before the
-branch switch. `run.sh` starts the proxy only when it is absent, which is how the
-stale gate survived. After `stop.sh` and `run.sh`, a mention in a guild channel
+branch switch. `run.sh` then reused any service
+that was already running, which is how the stale gate survived. It now recreates
+one whose image, arguments or config changed, and `learn/dev/03` checks that. After `stop.sh` and `run.sh`, a mention in a guild channel
 was answered in a thread, and each hop appeared where it should:
 
 ```
@@ -397,11 +405,25 @@ squid   agent   TCP_DENIED/403 CONNECT registry.npmjs.org:443   (2 times)
 ```
 
 The gateway tunnel is missing from squid's log for the reason given above: it
-has not closed. The denied lines were not part of the design. pi 0.84.2 points
-its version check and its remote model catalogue at `pi.dev`; the source of the
-npm registry requests was not traced. Neither destination is on the allowlist,
-and the coach answered anyway. That is the gate doing its job on requests nobody
-had thought to ask about, and doing it where it can be seen.
+has not closed. The denied lines were not part of the design, and both trace back
+to a specific line of code:
+
+- **pi.dev, three times within 7 ms, is pi's model catalogue.** In rpc mode pi
+  refreshes it in the background at start, over the network only for providers
+  that hold a credential, which here is `google-vertex` alone. The request goes
+  through `fetchWithRetry`, which retries a failed fetch twice with no delay, and
+  a denied CONNECT is a failed fetch. One refresh therefore shows up as three
+  lines, and since a failure stores nothing, it recurs each time pi starts. pi's
+  version check also points at pi.dev, but it only runs in interactive mode.
+- **registry.npmjs.org, twice, is pi-acp.** On every new session it runs
+  `npm view @earendil-works/pi-coding-agent version` to build an update notice,
+  with an 800 ms timeout and no switch to turn it off.
+
+`PI_OFFLINE=1` would silence pi's three lines but not pi-acp's two. Neither
+destination is on the allowlist, and the coach answered anyway: the catalogue
+falls back to the list compiled into pi-ai, and the update notice is simply
+absent. That is the gate doing its job on requests nobody had thought to ask
+about, and doing it where it can be seen.
 
 What it costs:
 
@@ -427,11 +449,6 @@ What it costs:
 - **A Discord resume.** A real conversation runs over the relay, but a session
   resumed on a regional gateway host, which the allowlist does not name, has not
   been measured.
-- **`run.sh` keeps stale containers.** It reuses a running proxy, relay or broker
-  even when what they read has changed, and says nothing. That cost the first
-  real Discord attempt its gateway.
-- **openab's state volume is owned by root**, so its thread map, reminders and
-  cache are lost on every restart.
 - **Turning the `/proc/1/environ` check into an assertion**, so that the presence
   of any secret beyond `DISCORD_BOT_TOKEN` fails the run.
 - **Caller identity at the broker.** It currently issues tokens to anything on
