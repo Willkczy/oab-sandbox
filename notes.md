@@ -494,7 +494,7 @@ docker exec oab-sandbox tar -cf - -C /tmp sessions | tar -xf - -C "$DEST"
 | S2 Docker 硬化 | ✅ 已驗（pi 路徑） |
 | S3 網路限縮 | ✅ 已驗（pi-only，即計劃的 fallback B） |
 | S4 金鑰不進容器 | ✅ 已驗 |
-| Discord 端到端 | ❌ 走不通，原因已量測（見下節 2026-09-06） |
+| Discord 端到端 | 🟡 gateway 已穿過閘門（2026-09-15，假 token 量到 4004）；真 token 對話未量 |
 
 `./run.sh` 把三個容器整組拉起來，`./stop.sh` 收掉。
 
@@ -648,3 +648,96 @@ $ curl -sS https://discord.com/api/v10/gateway
 ——這個脆弱性沒有因為主機名被確認而消失。
 
 > 尚未動手。`squid.conf` 還沒改，socat 也還沒建。
+
+---
+
+## ✅ socat relay 建好：gateway 過閘門，但差點帶著迴圈上線（2026-09-15）
+
+分支 `feat/discord-gateway-relay`，上一節（PR #12）的紀錄先併進來當起點。
+
+### 1. 先量「改之前」：上一節的判斷成立
+
+relay（當時用 network alias）＋舊的 `squid.conf`：
+
+```
+squid: 172.22.0.3 TCP_DENIED/403 CONNECT gateway.discord.gg:443 HIER_NONE/-
+relay: socat[13] W CONNECT gateway.discord.gg:443: Forbidden
+```
+
+allowlist 補上 `gateway.discord.gg`，只有這一個主機名。
+
+### 🔴 2. 補完 allowlist：squid 和 relay 互相 tunnel 了 31 次
+
+```
+squid: 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/172.22.0.3   ← 31 行
+relay: socat[1] E fork(): Resource temporarily unavailable
+relay: socat[1] N exit(1)
+```
+
+原因：`--network-alias` 是 Docker 內建 DNS 對**整個網路**回答的。squid 也在 oab-int 上，
+所以 squid 查 `gateway.discord.gg` 一樣拿到 relay 的 IP（`getent hosts` 直接看得到）。
+squid 連 relay，relay 再 CONNECT 回 squid，一路繞下去。
+
+最陰險的是 **31 行全是 `TCP_TUNNEL/200`，主機名也全是對的**。唯一露餡的是 `HIER_DIRECT/`
+後面那個 IP 是 relay 自己。它會停也不是有人發現，而是 relay 的 `--pids-limit 32` 讓 fork
+失敗、把 listener 整個弄死。又一個 finding 5。
+
+原本的計畫是「用 network alias，不用寫死 IP」。這個計畫是錯的，量了才知道。修法兩層：
+
+- 假解析只給 agent：`--add-host gateway.discord.gg:$RELAY_IP`，IP 每次啟動用
+  `docker inspect` 讀。squid 查到的是真的 DNS。
+- squid 加 `private_dst`：解析到私有網段的目的地一律拒絕。同樣的 alias 設定重跑，
+  31 次迴圈變成一行 `TCP_DENIED/403`。
+
+### ✅ 3. `--add-host` 版：TLS 端到端，squid 只記一條
+
+```
+client 解析 : 172.22.0.3（relay）
+squid 解析  : 162.159.130.234 等五個（Cloudflare）
+node https  : status 404 | cert verified: true | peer CN: discord.gg
+squid       : 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.130.234
+```
+
+404 是對的，普通 GET 沒有 websocket upgrade。重點是憑證驗過了，代表 socat 沒拆 TLS。
+
+### ✅ 4. `learn/13` arm C：無效 token 變成證據
+
+```
+gateway sent Ok(Hello(41250))
+Received close frame: Some(CloseFrame { code: Library(4004), reason: "Authentication failed." })
+openab: Discord rejected bot token.
+squid: 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.134.234
+```
+
+4004 只有 Discord 的 gateway 發得出來，所以不用真 token 就能證明 websocket 穿過閘門。
+
+openab 收到 4004 會**直接結束**，不像 DNS 失敗那樣每 5 秒重試。第一版 arm C 還在用
+`docker exec` 查 DNS，結果查的是一個已經停掉的容器。現在改成用同網路設定的兄弟容器問。
+
+前三次跑 arm C 有一次 squid 對 discord.com 和 gateway **都**回 `TCP_TUNNEL/503`，下一次原封
+不動就過了。那是閘門外側的問題，跟 relay 無關。判定當時回 UNDECIDABLE，沒有誤判；後來加了
+UPSTREAM FAILURE 分支把它講清楚。
+
+### ✅ 5. 真正的 `run.sh` 冷啟動（假 token）
+
+四個容器依序起來，openab 2 秒內走完 REST、gateway、4004，然後結束：
+
+```
+squid: 172.20.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.135.234   ← relay
+squid: 172.20.0.5 TCP_TUNNEL/200 CONNECT discord.com:443 HIER_DIRECT/162.159.137.232          ← agent
+```
+
+這一次冷啟動沒撞到「squid 還沒 ready」的 race，但只有一個樣本。
+
+`verify-hardening.sh` 加了 relay 的 7 項檢查，全過。其中一項是
+`ip_unprivileged_port_start = 0`：uid 1000、零 capability 的 socat 能綁 443，全靠這個
+Docker 預設值，哪天升級改掉了 relay 就起不來。
+
+### ⏳ 還沒量的
+
+- **真 token 的完整對話。** 需要第二支 bot 的 token，而且要有人在 Discord 上傳訊息。
+- **resume。** READY 裡的 `resume_gateway_url` 是區域主機（例如
+  `gateway-us-east1-b.discord.gg`），allowlist 和 `--add-host` 都沒涵蓋。binary 裡有 serenity
+  的 `Failed to resume` 路徑，推測會退回重新 identify，但沒量過。量法：真 token 連上之後，
+  在 `oab-relay` 裡殺掉那條 socat 子行程，看 serenity 怎麼重連。
+- **squid log 的歸屬。** gateway 流量的來源現在記成 relay，不是 agent。

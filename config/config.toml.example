@@ -52,7 +52,8 @@ working_dir = "/workspace"
 #                      inside the broker container.
 # HTTPS_PROXY etc.   : point at squid (S3). The agent container is on an
 #                      --internal network and cannot reach anything without
-#                      these.
+#                      these. They reach pi only; openab's own process gets
+#                      its copy from run.sh (finding 8).
 # NO_PROXY           : the broker and the proxy must not be routed through
 #                      the proxy themselves.
 env = { PI_ACP_PI_COMMAND = "/home/node/bin/pi-coach", GOOGLE_CLOUD_PROJECT = "your-gcp-project-id", GOOGLE_CLOUD_LOCATION = "global", GCE_METADATA_HOST = "oab-broker:8080", HTTPS_PROXY = "http://oab-proxy:3128", HTTP_PROXY = "http://oab-proxy:3128", NO_PROXY = "localhost,127.0.0.1,oab-proxy,oab-broker" }
