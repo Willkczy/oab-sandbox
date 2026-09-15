@@ -28,12 +28,6 @@ two kinds, and the difference is how you read them, not how important they are:
 
 | Script | Topic | Stage |
 |---|---|---|
-| *(to be written)* | capabilities: CapEff vs CapBnd | S2 |
-| *(to be written)* | no_new_privs, read-only, noexec | S2 |
-| *(to be written)* | cgroup memory and process ceilings | S2 |
-| *(to be written)* | the `/proc/1/environ` leak | S2 (open issue) |
-| *(to be written)* | the network gate and routes around the allowlist | S3 |
-| *(to be written)* | collecting a ticket from the token broker | S4 |
 | `05-context-growth.sh` | context resent every turn, and how cost accumulates | context layer |
 | `06-message-path-to-pi.sh` | how a message travels Discord → openab → pi-acp → pi (ACP over stdio) | architecture |
 | `07-context-truncation.sh` | what the `sed` truncation cuts, and why it beats asking the model nicely | context layer |
@@ -43,8 +37,19 @@ two kinds, and the difference is how you read them, not how important they are:
 | `12-shared-kernel-pid-namespace.sh` | one kernel under every container, and a PID namespace as a renumbered view of it | system layer, basics |
 | `13-discord-gateway-proxy.sh` | why one process obeys the proxy over REST and ignores it over websocket | S3 (open issue) |
 
-> The "to be written" experiments were all actually run during the walkthrough;
-> they simply have not been turned into scripts yet.
+### Run during the walkthrough, not yet scripted
+
+These were all run by hand while the system layer was being built, and are listed
+here so the gap stays visible rather than becoming folklore:
+
+| Topic | Stage |
+|---|---|
+| capabilities: CapEff vs CapBnd | S2 |
+| no_new_privs, read-only, noexec | S2 |
+| cgroup memory and process ceilings | S2 |
+| the `/proc/1/environ` leak | S2 (open issue) |
+| the network gate and routes around the allowlist | S3 |
+| collecting a ticket from the token broker | S4 |
 
 ## Side track: the Vertex authentication call chain (`docs/call-chain.md`)
 
