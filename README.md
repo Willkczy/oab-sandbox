@@ -15,8 +15,8 @@ agent.** Everything else — the read-only rootfs, the dropped capabilities, the
 allowlist — exists to make that one guarantee hold even after the agent itself is
 assumed compromised. The front-end is Discord, through openab. Its gateway websocket
 ignores the egress proxy, so a small relay carries it through the same gate as
-everything else (finding 8). That path is measured as far as Discord rejecting a
-deliberately invalid token, not yet through a real conversation.
+everything else (finding 8). A real conversation has run over that path, with every
+hop visible in squid's log.
 
 Every hardening flag in `run.sh` was verified empirically, and `verify-hardening.sh`
 re-checks them. Findings that contradicted the original plan were written down rather
@@ -148,15 +148,22 @@ value in `config/config.toml`, and a hard error if neither is present.
 
 ## Known gaps
 
-- **The Discord path is measured through authentication, not through a
-  conversation.** openab's gateway websocket runs on `tokio-tungstenite`, which
-  ignores the egress proxy, so `oab-relay` carries it to squid.
-  `learn/13-discord-gateway-proxy.sh` shows the gateway answering `Hello` and
-  closing with code 4004 on a deliberately invalid token, through that path.
-  Two things are still unmeasured. One is a full conversation with a real token.
-  The other is a resume: Discord directs it to a regional host such as
-  `gateway-us-east1-b.discord.gg`, which neither the allowlist nor the relay's
-  hosts entry covers. See [finding 8](docs/findings.md).
+- **A Discord resume has not been measured.** openab's gateway websocket reaches
+  Discord through `oab-relay`, and a real conversation has run over it
+  ([finding 8](docs/findings.md)). Discord directs a resumed session to a regional
+  host such as `gateway-us-east1-b.discord.gg`, which neither the allowlist nor the
+  relay's hosts entry covers, and what serenity does when that fails is not known.
+- **`run.sh` reuses containers that are already running, whatever changed.** It
+  starts `oab-proxy`, `oab-relay` and `oab-broker` only when they are absent, and
+  squid reads its configuration once, at start. Switching branches with the sandbox
+  up therefore left squid enforcing the old allowlist, and the bot stayed offline
+  with no error. Run `./stop.sh` before `./run.sh` after changing anything those
+  containers read.
+- **openab's own state does not persist.** The root of the `oab-openab-home`
+  volume is owned by root while openab runs as uid 1000, so it logs
+  `failed to persist thread mapping ... Permission denied` and starts every run
+  with an empty thread map, reminder list and cache. `oab-pi-home` is owned by
+  uid 1000 and is unaffected.
 - **`/proc/1/environ` is readable by the agent's own child processes**, which exposes
   `DISCORD_BOT_TOKEN` — the bot cannot function without it, so this is not fixable by
   removing the variable. `verify-hardening.sh` prints the leaked variable *names* (never

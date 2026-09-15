@@ -376,6 +376,33 @@ crossed the gate without a real token entering the experiment. `run.sh` itself,
 started cold with the same token, produced the same pair of squid lines and
 returned when openab exited.
 
+**Then a real conversation, after one more silent failure.** With the second
+bot's token, the first attempt stayed offline. squid had been started while the
+checkout was still on `main` and had never re-read its configuration, so every
+gateway `CONNECT` got `TCP_DENIED/403`, retried every five seconds, while openab
+printed `discord bot running`. The file inside the container was already the new
+one; squid's `cache.log` showed it had been processed exactly once, before the
+branch switch. `run.sh` starts the proxy only when it is absent, which is how the
+stale gate survived. After `stop.sh` and `run.sh`, a mention in a guild channel
+was answered in a thread, and each hop appeared where it should:
+
+```
+relay   successfully connected to gateway.discord.gg:443 via proxy oab-proxy:3128   (never closed)
+openab  discord bot connected user=openab-sandbox
+squid   broker  TCP_TUNNEL/200 CONNECT oauth2.googleapis.com:443
+squid   agent   TCP_TUNNEL/200 CONNECT discord.com:443
+squid   agent   TCP_TUNNEL/200 CONNECT aiplatform.googleapis.com:443
+squid   agent   TCP_DENIED/403 CONNECT pi.dev:443               (3 times)
+squid   agent   TCP_DENIED/403 CONNECT registry.npmjs.org:443   (2 times)
+```
+
+The gateway tunnel is missing from squid's log for the reason given above: it
+has not closed. The denied lines were not part of the design. pi 0.84.2 points
+its version check and its remote model catalogue at `pi.dev`; the source of the
+npm registry requests was not traced. Neither destination is on the allowlist,
+and the coach answered anyway. That is the gate doing its job on requests nobody
+had thought to ask about, and doing it where it can be seen.
+
 What it costs:
 
 - **squid attributes gateway traffic to the relay, not the agent.** Only the agent
@@ -397,10 +424,14 @@ What it costs:
   removing the container, which covers an ordinary stop. A container that dies on
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
-- **The Discord relay beyond authentication.** Finding 8 measures the gateway
-  crossing the gate as far as Discord rejecting an invalid token. A full
-  conversation with a real token is not measured, and neither is a session
-  resumed on a regional gateway host that the allowlist does not name.
+- **A Discord resume.** A real conversation runs over the relay, but a session
+  resumed on a regional gateway host, which the allowlist does not name, has not
+  been measured.
+- **`run.sh` keeps stale containers.** It reuses a running proxy, relay or broker
+  even when what they read has changed, and says nothing. That cost the first
+  real Discord attempt its gateway.
+- **openab's state volume is owned by root**, so its thread map, reminders and
+  cache are lost on every restart.
 - **Turning the `/proc/1/environ` check into an assertion**, so that the presence
   of any secret beyond `DISCORD_BOT_TOKEN` fails the run.
 - **Caller identity at the broker.** It currently issues tokens to anything on

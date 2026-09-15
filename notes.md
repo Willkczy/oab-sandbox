@@ -494,7 +494,7 @@ docker exec oab-sandbox tar -cf - -C /tmp sessions | tar -xf - -C "$DEST"
 | S2 Docker 硬化 | ✅ 已驗（pi 路徑） |
 | S3 網路限縮 | ✅ 已驗（pi-only，即計劃的 fallback B） |
 | S4 金鑰不進容器 | ✅ 已驗 |
-| Discord 端到端 | 🟡 gateway 已穿過閘門（2026-09-15，假 token 量到 4004）；真 token 對話未量 |
+| Discord 端到端 | ✅ 真 token 對話跑通（2026-09-15）；resume 未量 |
 
 `./run.sh` 把三個容器整組拉起來，`./stop.sh` 收掉。
 
@@ -741,3 +741,66 @@ Docker 預設值，哪天升級改掉了 relay 就起不來。
   的 `Failed to resume` 路徑，推測會退回重新 identify，但沒量過。量法：真 token 連上之後，
   在 `oab-relay` 裡殺掉那條 socat 子行程，看 serenity 怎麼重連。
 - **squid log 的歸屬。** gateway 流量的來源現在記成 relay，不是 agent。
+
+---
+
+## ✅ 真 token 對話跑通，但第一次被一個「還活著的舊 squid」擋住（2026-09-15 晚上）
+
+### 🔴 第一次：bot 一直離線，終端機只有 `discord bot running`
+
+```
+squid: 172.20.0.5 TCP_DENIED/403 CONNECT gateway.discord.gg:443 HIER_NONE/-   ← 每 5 秒一行
+relay: socat[90] W CONNECT gateway.discord.gg:443: Forbidden
+```
+
+relay 和 `--add-host` 都是對的，拒絕的是 squid。squid 在 20:58:08 啟動，那時 checkout 還在
+main，allowlist 裡沒有 `gateway.discord.gg`。之後切到分支再跑 `run.sh`，它看到 `oab-proxy`
+在跑就直接沿用。
+
+容器裡看到的 `squid.conf` 其實已經是新的，`grep` 找得到 `discord_gateway`。但 squid 只在
+啟動時讀一次設定：`cache.log` 裡的 `Processing Configuration File` 只出現在 20:58:08。
+
+又一個 finding 5：檔案是對的、容器是活的、log 說 bot running，閘門卻還是舊的。`run.sh` 對
+proxy、relay、broker 都是「沒在跑才啟動」，設定改了不會重建，也不會提醒。
+
+### ✅ `./stop.sh` 再 `./run.sh`：@mention 在 thread 裡得到回覆
+
+```
+relay : successfully connected to gateway.discord.gg:443 via proxy oab-proxy:3128   ← 沒有 exit，長連線
+openab: discord bot connected user=openab-sandbox
+squid : broker  TCP_TUNNEL/200 CONNECT oauth2.googleapis.com:443
+squid : agent   TCP_TUNNEL/200 CONNECT discord.com:443
+squid : agent   TCP_TUNNEL/200 CONNECT aiplatform.googleapis.com:443
+```
+
+gateway 那條不在 squid log 裡，因為隧道還開著，跟 learn/13 header 說的一樣。
+
+bot 在 thread 裡回：`pi v0.84.2`，讀了 `/workspace/AGENTS.md`，然後是「在！今天想練哪一題，或是
+要進行復盤、查看複習進度？」
+
+### 🔴 順便看到的兩件事
+
+**pi 會自己往外連，被 squid 擋掉了。**
+
+```
+squid: agent TCP_DENIED/403 CONNECT pi.dev:443              ← 3 次
+squid: agent TCP_DENIED/403 CONNECT registry.npmjs.org:443  ← 2 次
+```
+
+pi 0.84.2 的 `utils/version-check.js` 會查 `https://pi.dev/api/latest-version`，
+`core/remote-catalog-provider.js` 的預設 catalog 也在 `https://pi.dev`。npm registry 那兩次是誰發的
+沒有追。兩個都不在 allowlist 上，coach 照樣回答。閘門擋下了一個沒人想過要問的請求，而且看得見。
+
+**openab 的狀態 volume 是 root 的。**
+
+```
+WARN openab_core::acp::pool: failed to persist thread mapping path=/home/node/.openab/thread_map.json error=Permission denied (os error 13)
+```
+
+`oab-openab-home` 在 8/19 建立，根目錄是 uid 0、權限 755，openab 以 uid 1000 執行，寫不進去。
+thread 對應、reminders、multibot cache 每次重啟都歸零。`oab-pi-home` 是 uid 1000，所以 pi 沒事。
+不是這個分支造成的，先記下來，還沒修。
+
+### ⏳ 還沒量的
+
+- **resume。** 區域 gateway 主機不在 allowlist，也不在 `--add-host` 裡。
