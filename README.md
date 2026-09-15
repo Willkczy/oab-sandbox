@@ -13,8 +13,10 @@ The container around the agent has one narrow, testable design goal: **the
 service-account private key must never exist inside the container that runs the
 agent.** Everything else — the read-only rootfs, the dropped capabilities, the egress
 allowlist — exists to make that one guarantee hold even after the agent itself is
-assumed compromised. The front-end is Discord, through openab; that path currently
-stops at the egress gate (finding 8), so the agent is driven over ACP directly.
+assumed compromised. The front-end is Discord, through openab. Its gateway websocket
+ignores the egress proxy, so a small relay carries it through the same gate as
+everything else (finding 8). A real conversation has run over that path, with every
+hop visible in squid's log.
 
 Every hardening flag in `run.sh` was verified empirically, and `verify-hardening.sh`
 re-checks them. Findings that contradicted the original plan were written down rather
@@ -35,22 +37,22 @@ and a script that reported a week-old number without ever erroring.
 ## Architecture
 
 ```
-                            oab-ext  (has a route to the internet)
-                                 │
-                        ┌────────┴────────┐
-                        │    oab-proxy    │   squid, domain allowlist:
-                        │     (squid)     │   *.googleapis.com, *.discord.com,
-                        └────────┬────────┘   r.jina.ai — everything else denied
-                                 │
- ══════════════ oab-int  (--internal: no route out at all) ═══════════════
-              │                                        │
-   ┌──────────┴──────────┐                  ┌──────────┴──────────┐
-   │     oab-sandbox     │                  │     oab-broker      │
-   │                     │ ── token req ──▶ │                     │
-   │  openab + pi agent  │                  │  holds the SA key   │
-   │  vault mounted rw   │ ◀── short-lived  │  (mounted :ro)      │
-   │  NO credentials     │      token ───── │  GCE-metadata API   │
-   └─────────────────────┘                  └─────────────────────┘
+                                   oab-ext  (has a route to the internet)
+                                           │
+                                  ┌────────┴────────┐
+                                  │    oab-proxy    │   squid, domain allowlist:
+                                  │     (squid)     │   *.googleapis.com, *.discord.com,
+                                  └────────┬────────┘   gateway.discord.gg, r.jina.ai
+                                           │            — everything else denied
+ ═════════════════════ oab-int  (--internal: no route out at all) ═════════════════════
+          │                                │                                │
+┌─────────┴─────────┐            ┌─────────┴─────────┐            ┌─────────┴─────────┐
+│     oab-relay     │            │    oab-sandbox    │            │    oab-broker     │
+│                   │ ◀─ wss ──  │                   │ ─ token ─▶ │                   │
+│ socat: CONNECT    │  gateway   │ openab + pi agent │  request   │ holds the SA key  │
+│ via oab-proxy     │            │ vault mounted rw  │ ◀─ token ─ │ (mounted :ro)     │
+│ TLS left intact   │            │ NO credentials    │ short-lived│ GCE-metadata API  │
+└───────────────────┘            └───────────────────┘            └───────────────────┘
 ```
 
 Three properties follow from this layout:
@@ -59,7 +61,10 @@ Three properties follow from this layout:
   and nothing else. `GOOGLE_APPLICATION_CREDENTIALS` is deliberately *not* inherited.
   Google's auth libraries treat the broker as if it were GCE's metadata server.
 - **The agent container has no route out.** It sits on an `--internal` network. The only
-  path to the internet is through squid, which enforces a domain allowlist.
+  path to the internet is through squid, which enforces a domain allowlist. openab's
+  gateway websocket ignores proxy settings, so the agent resolves `gateway.discord.gg`
+  to `oab-relay`, which opens the `CONNECT` tunnel on its behalf. TLS stays end to end,
+  and squid refuses any destination that resolves to a private address.
 - **The broker is the smallest possible blast radius.** No shell tooling, no curl, no git;
   runs as uid 1000; dependencies pinned via `package-lock.json` and installed with `npm ci`.
 
@@ -79,9 +84,10 @@ Three properties follow from this layout:
 cp config/config.toml.example config/config.toml
 $EDITOR config/config.toml          # set allowed_users and GOOGLE_CLOUD_PROJECT
 
-# 2. Build both images (run.sh expects them to exist)
+# 2. Build the three images (run.sh expects them to exist)
 docker build -t oab-sandbox:pi .
 docker build -t oab-broker:latest broker/
+docker build -t oab-relay:latest relay/
 
 # 3. Check the hardening flags actually took effect
 ./verify-hardening.sh
@@ -105,7 +111,9 @@ list**; that would hand the accumulated history straight back to the agent.
 `verify-hardening.sh` is worth re-running after any change to `run.sh`, any image
 rebuild, or any Docker Desktop upgrade. It asserts capabilities are empty, the process
 is non-root, `no_new_privs` is set, the rootfs is read-only, `/tmp` is `noexec`, and the
-memory and pid ceilings are in place.
+memory and pid ceilings are in place, for the relay as well as the agent. It also checks
+that the relay can still bind port 443 without privileges, which depends on a Docker
+default rather than on anything in this repo.
 
 ## Layout
 
@@ -113,7 +121,8 @@ memory and pid ceilings are in place.
 |---|---|
 | `Dockerfile` | Thin layer over `ghcr.io/openabdev/openab:stable-pi`. Adds python3 and bumps pi — it deliberately rebuilds nothing from the base. |
 | `broker/` | The token broker. Its `server.js` implements just enough of the GCE metadata API for Google's auth libraries to accept it. |
-| `proxy/squid.conf` | Egress allowlist, plus a bandwidth pool for `r.jina.ai`. |
+| `relay/` | The Discord gateway relay: socat alone in an alpine image, turning each connection into a `CONNECT` tunnel through squid. |
+| `proxy/squid.conf` | Egress allowlist, a bandwidth pool for `r.jina.ai`, and a rule that never tunnels into a private address. |
 | `config/config.toml.example` | Template for the agent config. The real `config.toml` is gitignored. |
 | `config/pi-coach` | Model wrapper the agent invokes instead of `pi` directly. |
 | `config/adc-marker.json` | **Not a credential.** Deliberately invalid JSON that only exists to satisfy pi's `fileExists` gate; anything that actually parses it fails loudly, which is the point. |
@@ -128,7 +137,8 @@ memory and pid ceilings are in place.
 should expect to see, what it costs, and how to re-run it. They cover context growth
 across turns, truncation behaviour, the tool boundary, what a restart does to a tmpfs
 versus a volume, session directory resolution, why an egress proxy is not a uniform
-gate, and a cross-model instruction-compliance eval. `learn/README.md` indexes all of
+gate and how a relay carries a websocket through one, and a cross-model
+instruction-compliance eval. `learn/README.md` indexes all of
 them in teaching order.
 
 Most cost nothing. Three make a real Vertex call: two are about $0.0001, and the
@@ -138,14 +148,22 @@ value in `config/config.toml`, and a hard error if neither is present.
 
 ## Known gaps
 
-- **The Discord front-end does not work from inside this sandbox.** openab's
-  Discord gateway is a websocket, and the library behind it
-  (`tokio-tungstenite`) has no proxy support, so it cannot cross the egress
-  gate — while serenity's REST half, on `reqwest`, crosses it fine. The bot
-  starts, logs `discord bot running`, and stays offline. Upstream documents the
-  same limitation. Until a relay is built the agent is driven over ACP directly;
-  see [finding 8](docs/findings.md) and `learn/13-discord-gateway-proxy.sh`,
-  which measures both halves and needs no bot token.
+- **A Discord resume has not been measured.** openab's gateway websocket reaches
+  Discord through `oab-relay`, and a real conversation has run over it
+  ([finding 8](docs/findings.md)). Discord directs a resumed session to a regional
+  host such as `gateway-us-east1-b.discord.gg`, which neither the allowlist nor the
+  relay's hosts entry covers, and what serenity does when that fails is not known.
+- **`run.sh` reuses containers that are already running, whatever changed.** It
+  starts `oab-proxy`, `oab-relay` and `oab-broker` only when they are absent, and
+  squid reads its configuration once, at start. Switching branches with the sandbox
+  up therefore left squid enforcing the old allowlist, and the bot stayed offline
+  with no error. Run `./stop.sh` before `./run.sh` after changing anything those
+  containers read.
+- **openab's own state does not persist.** The root of the `oab-openab-home`
+  volume is owned by root while openab runs as uid 1000, so it logs
+  `failed to persist thread mapping ... Permission denied` and starts every run
+  with an empty thread map, reminder list and cache. `oab-pi-home` is owned by
+  uid 1000 and is unaffected.
 - **`/proc/1/environ` is readable by the agent's own child processes**, which exposes
   `DISCORD_BOT_TOKEN` — the bot cannot function without it, so this is not fixable by
   removing the variable. `verify-hardening.sh` prints the leaked variable *names* (never

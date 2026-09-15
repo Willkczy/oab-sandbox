@@ -322,6 +322,100 @@ Four ways out, in order of how much they cost the "exactly one gate" property:
 `redsocks` and iptables redirection are excluded outright: they need `NET_ADMIN`,
 which contradicts `--cap-drop ALL`.
 
+### What was built, and what building it found
+
+The first option: a socat relay, in `relay/`. Measuring it turned up three things
+the table above did not predict.
+
+**The allowlist had never been exercised.** `proxy/squid.conf` permitted
+`.discord.com`, but Discord announces its gateway as `wss://gateway.discord.gg`.
+`learn/13` could not have caught that, because the gateway client failed at local
+name resolution and never reached squid. With the relay in place and the old
+allowlist, squid answered the gateway `CONNECT` with `TCP_DENIED/403`. The
+allowlist now names `gateway.discord.gg` alone, following the precedent of
+`r.jina.ai`.
+
+**A spoofed name is answered for everyone on the network, the gate included.**
+The first design gave the relay `--network-alias gateway.discord.gg`. Docker's
+embedded DNS answers an alias for every container on that network, and squid is
+one of them. squid resolved the gateway to the relay, the relay tunnelled back to
+squid, and the two looped:
+
+```
+squid  172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/172.22.0.3   (31 lines)
+relay  socat[1] E fork(): Resource temporarily unavailable
+```
+
+Every hop was logged as a successful tunnel to the right hostname. Only the
+address after `HIER_DIRECT`, which was the relay's own, gave it away. The loop
+ended because the relay's `--pids-limit 32` made `fork()` fail and took the
+listener down with it, not because anything noticed. The name is now spoofed
+with `--add-host` on the agent container alone, so squid resolves the real
+address. squid also gained a `private_dst` rule that refuses any destination
+resolving to a private range. Under that rule the alias setup produces a single
+`TCP_DENIED/403` instead of a loop.
+
+**The invalid token became the proof.** `learn/13` gained a third arm that wires
+the relay the way `run.sh` does. With the same invalid token, openab's log shows
+the gateway's `Hello`, then:
+
+```
+tungstenite::protocol: Received close frame: Some(CloseFrame { code: Library(4004), reason: "Authentication failed." })
+ERROR openab: Discord rejected bot token.
+```
+
+and squid shows the tunnel that carried it, opened by the relay and dialled to a
+public address:
+
+```
+172.22.0.3 TCP_TUNNEL/200 4484 CONNECT gateway.discord.gg:443 - HIER_DIRECT/162.159.134.234
+```
+
+Close code 4004 comes from Discord's gateway or from nowhere, so the websocket
+crossed the gate without a real token entering the experiment. `run.sh` itself,
+started cold with the same token, produced the same pair of squid lines and
+returned when openab exited.
+
+**Then a real conversation, after one more silent failure.** With the second
+bot's token, the first attempt stayed offline. squid had been started while the
+checkout was still on `main` and had never re-read its configuration, so every
+gateway `CONNECT` got `TCP_DENIED/403`, retried every five seconds, while openab
+printed `discord bot running`. The file inside the container was already the new
+one; squid's `cache.log` showed it had been processed exactly once, before the
+branch switch. `run.sh` starts the proxy only when it is absent, which is how the
+stale gate survived. After `stop.sh` and `run.sh`, a mention in a guild channel
+was answered in a thread, and each hop appeared where it should:
+
+```
+relay   successfully connected to gateway.discord.gg:443 via proxy oab-proxy:3128   (never closed)
+openab  discord bot connected user=openab-sandbox
+squid   broker  TCP_TUNNEL/200 CONNECT oauth2.googleapis.com:443
+squid   agent   TCP_TUNNEL/200 CONNECT discord.com:443
+squid   agent   TCP_TUNNEL/200 CONNECT aiplatform.googleapis.com:443
+squid   agent   TCP_DENIED/403 CONNECT pi.dev:443               (3 times)
+squid   agent   TCP_DENIED/403 CONNECT registry.npmjs.org:443   (2 times)
+```
+
+The gateway tunnel is missing from squid's log for the reason given above: it
+has not closed. The denied lines were not part of the design. pi 0.84.2 points
+its version check and its remote model catalogue at `pi.dev`; the source of the
+npm registry requests was not traced. Neither destination is on the allowlist,
+and the coach answered anyway. That is the gate doing its job on requests nobody
+had thought to ask about, and doing it where it can be seen.
+
+What it costs:
+
+- **squid attributes gateway traffic to the relay, not the agent.** Only the agent
+  points at the relay, so the attribution can still be made, but it is inferred.
+- **The spoofed name is brittle.** It breaks if Discord renames the gateway host,
+  and it does not cover resumes, which Discord directs to regional hosts such as
+  `gateway-us-east1-b.discord.gg`. The binary carries serenity's `Failed to
+  resume` path, which suggests a fresh identify follows. That is not measured.
+- **The far side of the gate still fails sometimes.** One of the first three runs
+  of arm C got `TCP_TUNNEL/503` from squid for discord.com and the gateway alike,
+  and the next run passed unchanged. The arm's verdict reports that as an upstream
+  failure rather than as evidence about the relay.
+
 ---
 
 ## Still open
@@ -330,12 +424,14 @@ which contradicts `--cap-drop ALL`.
   removing the container, which covers an ordinary stop. A container that dies on
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
-- **Which way out to take for the Discord gateway.** Finding 8 settles *why* it
-  fails and rules the question out as a misconfiguration; it does not choose a
-  remedy. The socat relay is the only option that both restores the bot and
-  keeps the single-gate property, and it has not been built or measured. Until
-  one is chosen, the Discord front-end does not work from inside this sandbox
-  and the agent is exercised over ACP directly.
+- **A Discord resume.** A real conversation runs over the relay, but a session
+  resumed on a regional gateway host, which the allowlist does not name, has not
+  been measured.
+- **`run.sh` keeps stale containers.** It reuses a running proxy, relay or broker
+  even when what they read has changed, and says nothing. That cost the first
+  real Discord attempt its gateway.
+- **openab's state volume is owned by root**, so its thread map, reminders and
+  cache are lost on every restart.
 - **Turning the `/proc/1/environ` check into an assertion**, so that the presence
   of any secret beyond `DISCORD_BOT_TOKEN` fails the run.
 - **Caller identity at the broker.** It currently issues tokens to anything on

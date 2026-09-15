@@ -41,5 +41,5 @@ if docker ps --format '{{.Names}}' | grep -qx oab-sandbox; then
     fi
 fi
 
-docker rm -f oab-sandbox oab-broker oab-proxy >/dev/null 2>&1 || true
+docker rm -f oab-sandbox oab-relay oab-broker oab-proxy >/dev/null 2>&1 || true
 echo "sandbox stopped. production on the other machine is unaffected."

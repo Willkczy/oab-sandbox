@@ -494,7 +494,7 @@ docker exec oab-sandbox tar -cf - -C /tmp sessions | tar -xf - -C "$DEST"
 | S2 Docker 硬化 | ✅ 已驗（pi 路徑） |
 | S3 網路限縮 | ✅ 已驗（pi-only，即計劃的 fallback B） |
 | S4 金鑰不進容器 | ✅ 已驗 |
-| Discord 端到端 | ❌ 走不通，原因已量測（見下節 2026-09-06） |
+| Discord 端到端 | ✅ 真 token 對話跑通（2026-09-15）；resume 未量 |
 
 `./run.sh` 把三個容器整組拉起來，`./stop.sh` 收掉。
 
@@ -586,3 +586,221 @@ proxy), the integration cannot function.」），所以這不是設定錯誤，�
 可行的四條路寫在 `docs/findings.md` 那一則裡。其中最值得試的是用 socat 的 `PROXY`
 位址型別做一個 CONNECT 中繼：它只搬 bytes、不拆 TLS，所以憑證照樣端到端驗得過，
 流量仍然走 squid，**「唯一閘門」這條性質保得住**。
+
+---
+
+## 🔴 allowlist 少了 `.discord.gg`——而且 `learn/13` 不可能測到它（2026-09-08）
+
+上一節結論說 socat 中繼最值得試。準備動手時重讀 `proxy/squid.conf`，發現一個
+會讓那條路直接撞牆的東西：
+
+```
+# squid.conf:22
+acl allowed_domains dstdomain .googleapis.com .discord.com .discordapp.net .discordapp.com
+```
+
+**`.discord.gg` 不在裡面。** 而 gateway 就在那個網域下——直接問 Discord 自己：
+
+```console
+$ curl -sS https://discord.com/api/v10/gateway
+{"url":"wss://gateway.discord.gg"}
+```
+
+（這正是 serenity 用來拿 websocket URL 的那個**不需認證**端點，所以查它不用 token。）
+
+結尾是 `.gg` 不是 `.com`，`.discord.com` 那條規則涵蓋不到，於是會落到
+`http_access deny all`（`squid.conf:55`）。
+
+### 為什麼 `learn/13` 測不出來
+
+不是腳本寫得不好。arm B 裡 `tokio-tungstenite` 是在**本機 DNS 解析**那一步就失敗
+的，它從來沒有把任何封包送到 squid——**squid 的 allowlist 根本沒有參與那次實驗**。
+
+所以這是「沒被測到」，不是「測過了沒問題」。兩者在證據上完全不同，而它們長得一樣：
+都是「沒有出現相關的錯誤」。又一次 finding 5。
+
+### 🔴 真正麻煩的地方：它會偏袒最糟的選項
+
+這不只是「還要多改一行」。在沒補 allowlist 的狀態下逐一去試 finding 8 的四條路：
+
+| 選項 | 會觀察到什麼 |
+|---|---|
+| A（socat）／B（proxychains）／D（patch 上游） | 流量**真的走進 squid** → 撞上 `deny all` → 看起來像「這個方法沒用」 |
+| C（agent 直接接 `oab-ext`） | **完全繞過 squid** → 立刻成功，而且只要一行指令 |
+
+也就是說，環境會**主動製造證據**去支持那個唯一放棄「唯一閘門」的選項，而讓三個
+保住它的選項看起來都失敗。
+
+**所以補 allowlist 不是可以延後的細節，它是讓其他三條路有機會被公平評估的前提。**
+動 socat 之前先做這件事。
+
+一般化的教訓：要比較幾個方案時，先確認失敗的原因不是來自**所有方案共用的那一段**。
+否則比的不是方案本身，是誰比較能繞過那個共用瓶頸——而最能繞過的，往往正是最不該
+選的那個。
+
+### 補的時候要注意
+
+照這個檔案自己的先例（`squid.conf:34` 解釋為什麼寫 `r.jina.ai` 而不是 `.jina.ai`）：
+**只加 `gateway.discord.gg` 這一個主機名，不要加 `.discord.gg` 整個網域。**
+
+另外，這裡確認的是 Discord 在 `GET /gateway` 上**公告**的主機名。socat 方案要把它
+寫死在 `--add-host` 或 network alias 裡，所以對方哪天改主機名那條假 DNS 就會失效
+——這個脆弱性沒有因為主機名被確認而消失。
+
+> 尚未動手。`squid.conf` 還沒改，socat 也還沒建。
+
+---
+
+## ✅ socat relay 建好：gateway 過閘門，但差點帶著迴圈上線（2026-09-15）
+
+分支 `feat/discord-gateway-relay`，上一節（PR #12）的紀錄先併進來當起點。
+
+### 1. 先量「改之前」：上一節的判斷成立
+
+relay（當時用 network alias）＋舊的 `squid.conf`：
+
+```
+squid: 172.22.0.3 TCP_DENIED/403 CONNECT gateway.discord.gg:443 HIER_NONE/-
+relay: socat[13] W CONNECT gateway.discord.gg:443: Forbidden
+```
+
+allowlist 補上 `gateway.discord.gg`，只有這一個主機名。
+
+### 🔴 2. 補完 allowlist：squid 和 relay 互相 tunnel 了 31 次
+
+```
+squid: 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/172.22.0.3   ← 31 行
+relay: socat[1] E fork(): Resource temporarily unavailable
+relay: socat[1] N exit(1)
+```
+
+原因：`--network-alias` 是 Docker 內建 DNS 對**整個網路**回答的。squid 也在 oab-int 上，
+所以 squid 查 `gateway.discord.gg` 一樣拿到 relay 的 IP（`getent hosts` 直接看得到）。
+squid 連 relay，relay 再 CONNECT 回 squid，一路繞下去。
+
+最陰險的是 **31 行全是 `TCP_TUNNEL/200`，主機名也全是對的**。唯一露餡的是 `HIER_DIRECT/`
+後面那個 IP 是 relay 自己。它會停也不是有人發現，而是 relay 的 `--pids-limit 32` 讓 fork
+失敗、把 listener 整個弄死。又一個 finding 5。
+
+原本的計畫是「用 network alias，不用寫死 IP」。這個計畫是錯的，量了才知道。修法兩層：
+
+- 假解析只給 agent：`--add-host gateway.discord.gg:$RELAY_IP`，IP 每次啟動用
+  `docker inspect` 讀。squid 查到的是真的 DNS。
+- squid 加 `private_dst`：解析到私有網段的目的地一律拒絕。同樣的 alias 設定重跑，
+  31 次迴圈變成一行 `TCP_DENIED/403`。
+
+### ✅ 3. `--add-host` 版：TLS 端到端，squid 只記一條
+
+```
+client 解析 : 172.22.0.3（relay）
+squid 解析  : 162.159.130.234 等五個（Cloudflare）
+node https  : status 404 | cert verified: true | peer CN: discord.gg
+squid       : 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.130.234
+```
+
+404 是對的，普通 GET 沒有 websocket upgrade。重點是憑證驗過了，代表 socat 沒拆 TLS。
+
+### ✅ 4. `learn/13` arm C：無效 token 變成證據
+
+```
+gateway sent Ok(Hello(41250))
+Received close frame: Some(CloseFrame { code: Library(4004), reason: "Authentication failed." })
+openab: Discord rejected bot token.
+squid: 172.22.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.134.234
+```
+
+4004 只有 Discord 的 gateway 發得出來，所以不用真 token 就能證明 websocket 穿過閘門。
+
+openab 收到 4004 會**直接結束**，不像 DNS 失敗那樣每 5 秒重試。第一版 arm C 還在用
+`docker exec` 查 DNS，結果查的是一個已經停掉的容器。現在改成用同網路設定的兄弟容器問。
+
+前三次跑 arm C 有一次 squid 對 discord.com 和 gateway **都**回 `TCP_TUNNEL/503`，下一次原封
+不動就過了。那是閘門外側的問題，跟 relay 無關。判定當時回 UNDECIDABLE，沒有誤判；後來加了
+UPSTREAM FAILURE 分支把它講清楚。
+
+### ✅ 5. 真正的 `run.sh` 冷啟動（假 token）
+
+四個容器依序起來，openab 2 秒內走完 REST、gateway、4004，然後結束：
+
+```
+squid: 172.20.0.3 TCP_TUNNEL/200 CONNECT gateway.discord.gg:443 HIER_DIRECT/162.159.135.234   ← relay
+squid: 172.20.0.5 TCP_TUNNEL/200 CONNECT discord.com:443 HIER_DIRECT/162.159.137.232          ← agent
+```
+
+這一次冷啟動沒撞到「squid 還沒 ready」的 race，但只有一個樣本。
+
+`verify-hardening.sh` 加了 relay 的 7 項檢查，全過。其中一項是
+`ip_unprivileged_port_start = 0`：uid 1000、零 capability 的 socat 能綁 443，全靠這個
+Docker 預設值，哪天升級改掉了 relay 就起不來。
+
+### ⏳ 還沒量的
+
+- **真 token 的完整對話。** 需要第二支 bot 的 token，而且要有人在 Discord 上傳訊息。
+- **resume。** READY 裡的 `resume_gateway_url` 是區域主機（例如
+  `gateway-us-east1-b.discord.gg`），allowlist 和 `--add-host` 都沒涵蓋。binary 裡有 serenity
+  的 `Failed to resume` 路徑，推測會退回重新 identify，但沒量過。量法：真 token 連上之後，
+  在 `oab-relay` 裡殺掉那條 socat 子行程，看 serenity 怎麼重連。
+- **squid log 的歸屬。** gateway 流量的來源現在記成 relay，不是 agent。
+
+---
+
+## ✅ 真 token 對話跑通，但第一次被一個「還活著的舊 squid」擋住（2026-09-15 晚上）
+
+### 🔴 第一次：bot 一直離線，終端機只有 `discord bot running`
+
+```
+squid: 172.20.0.5 TCP_DENIED/403 CONNECT gateway.discord.gg:443 HIER_NONE/-   ← 每 5 秒一行
+relay: socat[90] W CONNECT gateway.discord.gg:443: Forbidden
+```
+
+relay 和 `--add-host` 都是對的，拒絕的是 squid。squid 在 20:58:08 啟動，那時 checkout 還在
+main，allowlist 裡沒有 `gateway.discord.gg`。之後切到分支再跑 `run.sh`，它看到 `oab-proxy`
+在跑就直接沿用。
+
+容器裡看到的 `squid.conf` 其實已經是新的，`grep` 找得到 `discord_gateway`。但 squid 只在
+啟動時讀一次設定：`cache.log` 裡的 `Processing Configuration File` 只出現在 20:58:08。
+
+又一個 finding 5：檔案是對的、容器是活的、log 說 bot running，閘門卻還是舊的。`run.sh` 對
+proxy、relay、broker 都是「沒在跑才啟動」，設定改了不會重建，也不會提醒。
+
+### ✅ `./stop.sh` 再 `./run.sh`：@mention 在 thread 裡得到回覆
+
+```
+relay : successfully connected to gateway.discord.gg:443 via proxy oab-proxy:3128   ← 沒有 exit，長連線
+openab: discord bot connected user=openab-sandbox
+squid : broker  TCP_TUNNEL/200 CONNECT oauth2.googleapis.com:443
+squid : agent   TCP_TUNNEL/200 CONNECT discord.com:443
+squid : agent   TCP_TUNNEL/200 CONNECT aiplatform.googleapis.com:443
+```
+
+gateway 那條不在 squid log 裡，因為隧道還開著，跟 learn/13 header 說的一樣。
+
+bot 在 thread 裡回：`pi v0.84.2`，讀了 `/workspace/AGENTS.md`，然後是「在！今天想練哪一題，或是
+要進行復盤、查看複習進度？」
+
+### 🔴 順便看到的兩件事
+
+**pi 會自己往外連，被 squid 擋掉了。**
+
+```
+squid: agent TCP_DENIED/403 CONNECT pi.dev:443              ← 3 次
+squid: agent TCP_DENIED/403 CONNECT registry.npmjs.org:443  ← 2 次
+```
+
+pi 0.84.2 的 `utils/version-check.js` 會查 `https://pi.dev/api/latest-version`，
+`core/remote-catalog-provider.js` 的預設 catalog 也在 `https://pi.dev`。npm registry 那兩次是誰發的
+沒有追。兩個都不在 allowlist 上，coach 照樣回答。閘門擋下了一個沒人想過要問的請求，而且看得見。
+
+**openab 的狀態 volume 是 root 的。**
+
+```
+WARN openab_core::acp::pool: failed to persist thread mapping path=/home/node/.openab/thread_map.json error=Permission denied (os error 13)
+```
+
+`oab-openab-home` 在 8/19 建立，根目錄是 uid 0、權限 755，openab 以 uid 1000 執行，寫不進去。
+thread 對應、reminders、multibot cache 每次重啟都歸零。`oab-pi-home` 是 uid 1000，所以 pi 沒事。
+不是這個分支造成的，先記下來，還沒修。
+
+### ⏳ 還沒量的
+
+- **resume。** 區域 gateway 主機不在 allowlist，也不在 `--add-host` 裡。

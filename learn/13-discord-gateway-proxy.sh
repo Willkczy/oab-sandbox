@@ -18,6 +18,10 @@
 # running the same container twice: once without the proxy variables
 # (reproducing 2026-09-04) and once with them.
 #
+# A third arm tests the remedy rather than the failure. It adds the relay from
+# relay/, reached through an --add-host entry exactly as run.sh wires it, and
+# asks whether the gateway half now leaves through the same gate as the REST half.
+#
 # ── What to expect ────────────────────────────────────────────────────
 #   arm A (no proxy vars)  discord.com does not resolve; reqwest never mentions
 #                          a proxy; the shard fails. The 2026-09-04 state.
@@ -27,10 +31,20 @@
 #                          the gate. The very next lines are the gateway half
 #                          failing inside Tungstenite on name resolution,
 #                          retried every 5s forever at WARN.
+#   arm C (vars + relay)   the REST half as in arm B. gateway.discord.gg now
+#                          resolves to the relay, and the gateway half gets
+#                          Hello from Discord, sends Identify, and is closed
+#                          with code 4004 "Authentication failed.". openab logs
+#                          `Discord rejected bot token.` and exits within the
+#                          second. squid logs the gateway tunnel once it closes.
 #
 # No valid token is needed for either layer. serenity asks the *unauthenticated*
 # GET /gateway for the websocket URL, so REST succeeds regardless of the token,
 # and the gateway attempt that follows is what layer 2 is about.
+#
+# In arm C the invalid token becomes the instrument. Only Discord's gateway can
+# send close code 4004, so seeing it proves the websocket crossed the gate and
+# reached Discord, and no real token is ever exposed to the experiment.
 #
 # ── How to read the evidence ──────────────────────────────────────────
 # Measurement comes from openab's own debug log, not from squid's access.log.
@@ -39,6 +53,11 @@
 # proxy leaves access.log empty for as long as the process lives. Counting log
 # lines there reports "nothing happened" for a request that plainly did. The
 # squid log is still captured, as corroboration for whatever has closed.
+#
+# Arm C's gateway tunnel does close, when Discord hangs up, so it is logged. The
+# client squid records for it is the relay, not the agent, and the address after
+# HIER_DIRECT is Discord's. A private address there would be the loop run.sh
+# warns about, which squid.conf's private_dst rule turns into TCP_DENIED.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
 #   ./learn/13-discord-gateway-proxy.sh
@@ -58,6 +77,7 @@ SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 PROXY=oab-t13-proxy
 AGENT=oab-t13-agent
+RELAY=oab-t13-relay
 NET_INT=oab-t13-int
 NET_EXT=oab-t13-ext
 LOG=/var/log/squid/access.log
@@ -127,6 +147,7 @@ TOKEN="$TOKEN_ID.$TOKEN_TS.$TOKEN_SIG"
 
 cleanup() {
     docker rm -f "$AGENT" >/dev/null 2>&1 || true
+    docker rm -f "$RELAY" >/dev/null 2>&1 || true
     docker rm -f "$PROXY" >/dev/null 2>&1 || true
     docker network rm "$NET_INT" >/dev/null 2>&1 || true
     docker network rm "$NET_EXT" >/dev/null 2>&1 || true
@@ -159,54 +180,67 @@ while [ "$i" -lt 30 ]; do
     sleep 1
 done
 echo "proxy ready after ${i}s"
+
+# ── The relay, built exactly as run.sh builds it ──────────────────────
+#
+# Only arm C points anything at it. Starting it up front costs the other arms
+# nothing, because nothing in them resolves gateway.discord.gg to this address.
+docker run -d --name "$RELAY" --network "$NET_INT" \
+    --read-only \
+    --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+    --pids-limit 32 --memory 32m --memory-swap 32m \
+    oab-relay:latest -d -d TCP-LISTEN:443,fork,reuseaddr \
+    "PROXY:$PROXY:gateway.discord.gg:443,proxyport=3128" >/dev/null
+RELAY_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"$NET_INT\"}}{{.IPAddress}}{{end}}" "$RELAY")
+echo "relay at $RELAY_IP"
 echo
 
 # ── One arm of the experiment ─────────────────────────────────────────
 #
-# $1 = label, $2 = "proxy" to give openab the variables, anything else to
-# withhold them. Every other flag matches run.sh, so the only difference between
-# the arms is the thing being measured.
+# $1 = label, $2 = what openab is given:
+#   none   no proxy variables (arm A)
+#   proxy  the proxy variables (arm B)
+#   relay  the proxy variables plus the relay's hosts entry (arm C)
+# Every other flag matches run.sh, so the only difference between the arms is the
+# thing being measured.
 #
 # RUST_LOG=debug is the instrument. At openab's default level the entire failure
 # is invisible: the shard error is logged by serenity at WARN inside a retry
 # loop, and openab's own INFO line says `discord bot running` either way.
 run_arm() {
     label="$1"
-    with_proxy="$2"
+    given="$2"
 
     echo "══════════ arm: $label ══════════"
     docker rm -f "$AGENT" >/dev/null 2>&1 || true
 
     before=$(docker exec "$PROXY" sh -c "wc -l < $LOG 2>/dev/null || echo 0")
 
-    if [ "$with_proxy" = "proxy" ]; then
-        docker run -d --name "$AGENT" --network "$NET_INT" \
-            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-            -v oab-pi-home:/home/node/.pi \
-            -v oab-openab-home:/home/node/.openab \
-            --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
-            --pids-limit 256 --memory 2g --memory-swap 2g \
-            -e DISCORD_BOT_TOKEN="$TOKEN" \
-            -e RUST_LOG=debug \
+    # The per-arm flags are collected in the positional parameters, the one array
+    # POSIX sh has, so each flag stays a single argument however it is spelled.
+    set --
+    if [ "$given" = "proxy" ] || [ "$given" = "relay" ]; then
+        set -- "$@" \
             -e HTTPS_PROXY="http://$PROXY:3128" \
             -e HTTP_PROXY="http://$PROXY:3128" \
-            -e NO_PROXY="localhost,127.0.0.1,$PROXY" \
-            -v "$SANDBOX/config/config.toml:/etc/openab/config.toml:ro" \
-            -v "$SANDBOX/config/pi-coach:/home/node/bin/pi-coach:ro" \
-            oab-sandbox:pi >/dev/null
-    else
-        docker run -d --name "$AGENT" --network "$NET_INT" \
-            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-            -v oab-pi-home:/home/node/.pi \
-            -v oab-openab-home:/home/node/.openab \
-            --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
-            --pids-limit 256 --memory 2g --memory-swap 2g \
-            -e DISCORD_BOT_TOKEN="$TOKEN" \
-            -e RUST_LOG=debug \
-            -v "$SANDBOX/config/config.toml:/etc/openab/config.toml:ro" \
-            -v "$SANDBOX/config/pi-coach:/home/node/bin/pi-coach:ro" \
-            oab-sandbox:pi >/dev/null
+            -e NO_PROXY="localhost,127.0.0.1,$PROXY"
     fi
+    if [ "$given" = "relay" ]; then
+        set -- "$@" --add-host "gateway.discord.gg:$RELAY_IP"
+    fi
+
+    docker run -d --name "$AGENT" --network "$NET_INT" \
+        --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+        -v oab-pi-home:/home/node/.pi \
+        -v oab-openab-home:/home/node/.openab \
+        --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+        --pids-limit 256 --memory 2g --memory-swap 2g \
+        -e DISCORD_BOT_TOKEN="$TOKEN" \
+        -e RUST_LOG=debug \
+        "$@" \
+        -v "$SANDBOX/config/config.toml:/etc/openab/config.toml:ro" \
+        -v "$SANDBOX/config/pi-coach:/home/node/bin/pi-coach:ro" \
+        oab-sandbox:pi >/dev/null
 
     # The shard queuer retries every 5s; 14s captures three attempts, which is
     # enough to show the failure is persistent rather than a cold-start race.
@@ -220,16 +254,23 @@ run_arm() {
         || echo "  (not printed)"
 
     echo
-    echo "--- can this container resolve discord.com? ---"
+    echo "--- what this arm's resolver answers ---"
+    # Asked from a sibling container with the same network flags rather than
+    # with `docker exec`. In arm C openab exits within a second of Discord
+    # rejecting the token, and an exec into a stopped container measures nothing.
+    #
     # Capture first rather than piping: the exit status of `cmd | head` is
     # head's, which is always 0, so a trailing `|| echo` would never fire and a
     # failed lookup would print as a blank line.
-    dns=$(docker exec "$AGENT" getent hosts discord.com 2>&1 || true)
-    if [ -n "$dns" ]; then
-        echo "  $dns"
-    else
-        echo "  NO ANSWER -- discord.com did not resolve"
-    fi
+    for host in discord.com gateway.discord.gg; do
+        dns=$(docker run --rm --network "$NET_INT" "$@" --entrypoint getent \
+            oab-sandbox:pi hosts "$host" 2>/dev/null || true)
+        if [ -n "$dns" ]; then
+            printf '  %-20s %s\n' "$host" "$(echo "$dns" | awk 'NR == 1 { print $1 }')"
+        else
+            printf '  %-20s %s\n' "$host" "NO ANSWER"
+        fi
+    done
 
     echo
     echo "--- the REST half (reqwest) ---"
@@ -244,6 +285,12 @@ run_arm() {
     echo "--- the gateway half (tokio-tungstenite) ---"
     grep -a -o "Err starting shard [0-9]*: [A-Za-z]*(.\{0,80\}" \
         "$OUT/$label.openab.log" | sort -u | head -3 | sed 's/^/  /' || true
+    grep -a -o "Ok(Hello([0-9]*))" \
+        "$OUT/$label.openab.log" | sort -u | sed 's/^/  gateway sent /' || true
+    grep -a -o 'Received close frame: .*"[^"]*" })' \
+        "$OUT/$label.openab.log" | sort -u | sed 's/^/  /' || true
+    grep -a -o "Discord rejected bot token\." \
+        "$OUT/$label.openab.log" | sort -u | sed 's/^/  openab: /' || true
 
     echo
     echo "--- what squid logged (closed transactions only) ---"
@@ -251,7 +298,8 @@ run_arm() {
     added=$((after - before))
     if [ "$added" -gt 0 ]; then
         docker exec "$PROXY" tail -n "$added" "$LOG" > "$OUT/$label.squid.log"
-        awk '{print "  " $4, $6, $7}' "$OUT/$label.squid.log"
+        # client, result, method, destination, and the address squid dialled
+        awk '{print "  " $3, $4, $6, $7, $9}' "$OUT/$label.squid.log"
     else
         : > "$OUT/$label.squid.log"
         echo "  (nothing closed yet -- see the note in this script's header)"
@@ -263,6 +311,11 @@ run_arm() {
 
 run_arm "A-no-proxy-vars" "none"
 run_arm "B-proxy-vars"    "proxy"
+run_arm "C-relay"         "relay"
+
+# The relay is removed on exit, and its log is the only record of what it
+# forwarded, so keep it with the other evidence.
+docker logs "$RELAY" > "$OUT/relay.log" 2>&1
 
 # ── Verdict ───────────────────────────────────────────────────────────
 count() {
@@ -271,12 +324,20 @@ count() {
 
 A="$OUT/A-no-proxy-vars.openab.log"
 B="$OUT/B-proxy-vars.openab.log"
+C="$OUT/C-relay.openab.log"
+C_SQUID="$OUT/C-relay.squid.log"
 
 a_rest_ok=$(count 'pooling idle connection for ("https", discord.com)' "$A")
 b_rest_ok=$(count 'pooling idle connection for ("https", discord.com)' "$B")
 b_proxied=$(count "intercepts 'https://discord.com/'" "$B")
 b_gw_tung=$(count "Err starting shard 0: Tungstenite" "$B")
 b_gw_dns=$(count "failed to lookup address information" "$B")
+c_hello=$(count "Ok(Hello(" "$C")
+c_4004=$(count "Received close frame: .*code: Library(4004)" "$C")
+c_gw_dns=$(count "failed to lookup address information" "$C")
+c_tunnel=$(count "TCP_TUNNEL/200 [0-9]* CONNECT gateway.discord.gg:443" "$C_SQUID")
+c_denied=$(count "TCP_DENIED/403 [0-9]* CONNECT gateway.discord.gg:443" "$C_SQUID")
+c_upstream=$(count "TCP_TUNNEL/503 [0-9]* CONNECT gateway.discord.gg:443" "$C_SQUID")
 
 echo "══════════ verdict ══════════"
 echo "arm A  REST reached discord.com      : ${a_rest_ok:-0}"
@@ -284,6 +345,12 @@ echo "arm B  reqwest routed via the proxy  : ${b_proxied:-0}"
 echo "arm B  REST reached discord.com      : ${b_rest_ok:-0}"
 echo "arm B  shard failed inside Tungstenite: ${b_gw_tung:-0}"
 echo "arm B  ... of those, on name lookup  : ${b_gw_dns:-0}"
+echo "arm C  gateway sent Hello            : ${c_hello:-0}"
+echo "arm C  gateway closed with 4004      : ${c_4004:-0}"
+echo "arm C  squid tunnelled the gateway   : ${c_tunnel:-0}"
+echo "arm C  squid denied the gateway      : ${c_denied:-0}"
+echo "arm C  squid could not reach Discord : ${c_upstream:-0}"
+echo "arm C  shard failed on name lookup   : ${c_gw_dns:-0}"
 echo
 
 echo "LAYER 1:"
@@ -302,3 +369,31 @@ echo
 
 echo "LAYER 2:"
 classify_layer2 "${b_rest_ok:-0}" "${b_gw_tung:-0}" "${b_gw_dns:-0}"
+echo
+
+# Unlike layer 2 this one is mechanical, because the decisive evidence is a
+# single value only one party can produce. A close code of 4004 comes from
+# Discord's gateway or from nowhere, and the squid line says which road it took.
+echo "THE RELAY (arm C):"
+if [ "${c_4004:-0}" -gt 0 ] && [ "${c_tunnel:-0}" -gt 0 ]; then
+    echo "  CONFIRMED -- the gateway half crossed the gate and reached Discord."
+    echo "  Only Discord's gateway sends close code 4004, and squid logged the"
+    echo "  tunnel that carried it. The token was rejected, as it should be."
+elif [ "${c_denied:-0}" -gt 0 ]; then
+    echo "  BLOCKED AT THE GATE -- squid refused the gateway CONNECT."
+    echo "  Either squid.conf lacks gateway.discord.gg, or the name resolved to a"
+    echo "  private address and private_dst refused it. Look for a network alias."
+elif [ "${c_upstream:-0}" -gt 0 ]; then
+    # Seen once in three runs on 2026-09-15: squid answered 503 for discord.com
+    # and the gateway alike, and the next run passed unchanged. A 503 is the
+    # internet side of the gate failing, which says nothing about the relay.
+    echo "  UPSTREAM FAILURE -- squid took the CONNECT but could not reach Discord."
+    echo "  That is the far side of the gate, not the relay. Re-run before"
+    echo "  concluding anything."
+elif [ "${c_gw_dns:-0}" -gt 0 ]; then
+    echo "  NOT IN THE PATH -- openab still resolved the gateway host itself."
+    echo "  The --add-host entry did not reach the agent container."
+else
+    echo "  UNDECIDABLE -- no close code, no squid line, no lookup failure."
+    echo "  Read $C and $OUT/relay.log before concluding anything."
+fi
