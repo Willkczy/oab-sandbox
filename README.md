@@ -126,6 +126,7 @@ default rather than on anything in this repo.
 | `broker/` | The token broker. Its `server.js` implements just enough of the GCE metadata API for Google's auth libraries to accept it. |
 | `relay/` | The Discord gateway relay: socat alone in an alpine image, turning each connection into a `CONNECT` tunnel through squid. |
 | `proxy/squid.conf` | Egress allowlist, a bandwidth pool for `r.jina.ai`, and a rule that never tunnels into a private address. |
+| `vault-sync.sh` | Moves notes between `vault/` and the main vault, with a review in the direction that needs one. |
 | `config/config.toml.example` | Template for the agent config. The real `config.toml` is gitignored. |
 | `config/pi-coach` | Model wrapper the agent invokes instead of `pi` directly. |
 | `config/adc-marker.json` | **Not a credential.** Deliberately invalid JSON that only exists to satisfy pi's `fileExists` gate; anything that actually parses it fails loudly, which is the point. |
@@ -184,3 +185,31 @@ this repo's `Dockerfile` installs python3 that the base image lacks.
 gitignored here on purpose rather than vendored as a submodule. To change it,
 `cd vault && git ...`. This repo treats it purely as the directory that gets mounted
 into the agent's workspace.
+
+### Keeping `vault/` in step
+
+`vault/` is a clone of the vault you practise in, and nothing updates it by itself.
+Left alone it drifts: on 2026-09-16 it was four weeks behind, and the coach had been
+answering from that snapshot. `vault-sync.sh` moves notes both ways, and `run.sh` and
+`stop.sh` say when the two copies have drifted.
+
+```sh
+./vault-sync.sh status   # where things stand
+./vault-sync.sh pull     # main vault -> vault/, before a session
+./vault-sync.sh back     # vault/ -> main vault, after a session
+```
+
+The two directions are not treated alike. `pull` carries your own notes into the
+sandbox. `back` carries what the agent wrote into the vault you trust, and `vault/` is
+the one host path the agent can write. So `back` lists the commits, flags every file
+that is not a note, such as `AGENTS.md`, `scripts/` or `.obsidian/`, and fast-forwards
+only after a yes. Commits stay manual on both sides.
+
+When the sandbox runs on another machine, run `back` on the machine that commits to the
+main vault and point it at the other one over ssh:
+
+```sh
+./vault-sync.sh back user@host:Projects/oab-sandbox/vault
+```
+
+A main vault in iCloud Drive should only ever have one machine writing its `.git`.

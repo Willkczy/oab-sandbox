@@ -874,3 +874,41 @@ pi 啟動都會再來一次。
 順帶修正 Dockerfile 的一句舊描述。「pi 的模型目錄是編進 pi-ai 的靜態 JSON」在 0.84.2 已經不完全對：
 它啟動時會從 pi.dev 疊一層遠端目錄。sandbox 裡被 squid 擋掉，所以編進去的清單仍是全部；但在
 沒有閘門的 production 機器上，**不升級 pi，可用的模型清單也可能改變**。
+
+---
+
+## 開發 ④：vault/ 落後四週，改成有提醒的雙向同步（2026-09-16）
+
+### 🔴 發現
+
+沙箱的 `vault/` 是 8/19 從 iCloud vault clone 出來的，之後沒有人更新過。9/16 比對的結果：
+iCloud 有 7 個 commit 沒進來、28 個檔案還沒 commit、57 個檔案內容不同。9/15 那次 Discord
+對話，coach 是拿三週多以前的進度在回答，而且沒有任何地方提醒。又一個 finding 5。
+
+先手動同步一次，兩邊都停在 `c9acb6a`，然後寫成 `vault-sync.sh`。
+
+### 設計：兩個方向的風險不同
+
+| 方向 | 指令 | 為什麼 |
+|---|---|---|
+| main vault → `vault/` | `pull` | 自己的筆記送進沙箱。只要 `vault/` 沒有未 commit 的修改就安全 |
+| `vault/` → main vault | `back` | agent 寫的東西進到可信的 vault。讀過被注入網頁的 agent，改 `AGENTS.md` 或 `scripts/` 跟改筆記一樣容易，所以要列出 commit、標出不是筆記的檔案、按 yes 才 fast-forward |
+
+commit 兩邊都留給人。練習的 commit 訊息該自己寫，全自動 commit 會把該標出來的東西一起 commit 掉。
+
+`run.sh` 啟動前跑 `remind-start`，`stop.sh` 結束後跑 `remind-stop`，只提醒、不擋。
+
+### 🔴 測試時抓到的坑
+
+`vault/` 是 `run.sh` 的掛載點。fresh clone 第一次跑時，Docker 會自己建一個**空目錄**。
+這時 `git -C vault rev-parse` 會往上找到 oab-sandbox 自己的 repo，把它當成 vault，提醒就會
+拿 GitHub 上的 oab-sandbox 去比。改成要求 repo 的 top level 正好是這個目錄，`learn/dev/05`
+第 9 個情境專測這件事。
+
+### 沙箱搬到舊機時
+
+iCloud 裡的 `.git` 被兩台同時寫會壞，`手機接入計劃.md` 早就記過這個雷。所以 `status`、`pull`
+和提醒在跑沙箱的那台執行，`back` 則在 commit 主 vault 的那台執行，SOURCE 用 ssh 指向另一台的
+`vault/`。這樣主 vault 的 `.git` 永遠只有一台在寫。
+
+`learn/dev/05` 九個情境全過，測試 repo 的路徑刻意含空格、筆記刻意用中文檔名，跟真的 vault 一樣。

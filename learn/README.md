@@ -76,3 +76,9 @@ Chinese; `docs/findings.md` is the English account and the one to read first.
 |---|---|---|
 | `dev/03-stale-service-containers.sh` | `run.sh` recreating a service whose image, arguments or config changed, instead of silently reusing it | findings #8 |
 | `dev/04-openab-state-volume.sh` | openab's state volume writable by uid 1000, including one Docker had already created root-owned | findings #8 |
+
+### development ④ — keeping `vault/` in step with the main vault
+
+| Script | What it accepted | Written up in |
+|---|---|---|
+| `dev/05-vault-sync.sh` | `vault-sync.sh` syncing both ways, and refusing a dirty pull, an unreviewed or non-fast-forward `back`, and a parent repository mistaken for the vault | findings #7 |

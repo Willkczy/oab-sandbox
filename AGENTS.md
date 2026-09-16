@@ -117,3 +117,9 @@ A separate repository with its own remote and history, gitignored here on purpos
 rather than vendored. To change it: `cd vault && git ...`. This repo treats it
 purely as the directory mounted into the agent's workspace, and scripts that need
 it check for it first and explain the dependency rather than failing on it.
+
+Notes move between `vault/` and the main vault through `vault-sync.sh`, never by
+copying files. Its `back` direction is the only way anything the agent wrote
+reaches the main vault, so keep that direction reviewed: a change that makes it
+merge without showing the commits, or stop flagging files that are not notes,
+removes the one check on that path.
