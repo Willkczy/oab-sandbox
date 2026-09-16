@@ -43,3 +43,9 @@ fi
 
 docker rm -f oab-sandbox oab-relay oab-broker oab-proxy >/dev/null 2>&1 || true
 echo "sandbox stopped. production on the other machine is unaffected."
+
+# --- What this session wrote into vault/ has not reached the main vault ---
+#
+# Bringing it back is deliberately not automatic: vault/ is the one host path the
+# agent can write, so what it wrote is reviewed before the main vault takes it.
+"$SANDBOX/vault-sync.sh" remind-stop || true
