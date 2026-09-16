@@ -30,12 +30,62 @@ fi
 docker network inspect oab-int >/dev/null 2>&1 || docker network create --internal oab-int
 docker network inspect oab-ext >/dev/null 2>&1 || docker network create oab-ext
 
+# --- Long-lived services: reuse only what still matches ---
+#
+# oab-proxy, oab-relay and oab-broker outlive a single agent run, so a second
+# ./run.sh keeps them rather than restarting them. The test used to be only "is a
+# container with this name running?". On 2026-09-15 it said yes for a squid
+# started from an older squid.conf. squid reads its configuration once, at start,
+# so the new allowlist never took effect, and the Discord bot stayed offline with
+# nothing in openab's log (finding 8).
+#
+# Each service is now started with a label that fingerprints what it was started
+# from: the image ID, every docker run argument, and the contents of the config
+# file it mounts, if any. A running container is reused only when its label
+# matches what this run would start. Anything else is recreated, and says so.
+#
+# The fingerprint is a cksum, a change detector and nothing more. The broker's key
+# file is deliberately left out of it: a label is readable by anyone who can run
+# `docker inspect`, and not even a checksum of a private key belongs there. A
+# rotated key therefore still needs ./stop.sh first.
+#
+# learn/dev/03 runs this function against a throwaway container.
+#
+# start_service <name> <image> <config file, or -> <docker run arguments...>
+# The arguments must include the image. Returns 0 if it started a container, 1 if
+# it reused a running one.
+start_service() {
+    name=$1
+    image=$2
+    config=$3
+    shift 3
+
+    want=$(
+        {
+            docker image inspect -f '{{.Id}}' "$image" 2>/dev/null
+            if [ "$config" != "-" ]; then cat "$config"; fi
+            printf '%s\n' "$@"
+        } | cksum | awk '{ print $1 "-" $2 }'
+    )
+    running=$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)
+    have=$(docker inspect -f '{{index .Config.Labels "oab.inputs"}}' "$name" 2>/dev/null || true)
+
+    if [ "$running" = "true" ] && [ "$have" = "$want" ]; then
+        return 1
+    fi
+    if [ "$running" = "true" ]; then
+        echo "$name is running, but not from what this run would start -- recreating it"
+    fi
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    docker run -d --name "$name" --label "oab.inputs=$want" "$@" >/dev/null
+    return 0
+}
+
 # --- Egress gateway ---
-if ! docker ps --format '{{.Names}}' | grep -qx oab-proxy; then
-    docker rm -f oab-proxy >/dev/null 2>&1 || true
-    docker run -d --name oab-proxy --network oab-int \
-        -v "$SANDBOX/proxy/squid.conf:/etc/squid/squid.conf:ro" \
-        ubuntu/squid:latest >/dev/null
+if start_service oab-proxy ubuntu/squid:latest "$SANDBOX/proxy/squid.conf" \
+    --network oab-int \
+    -v "$SANDBOX/proxy/squid.conf:/etc/squid/squid.conf:ro" \
+    ubuntu/squid:latest; then
     docker network connect oab-ext oab-proxy
     echo "oab-proxy started"
 fi
@@ -53,14 +103,13 @@ fi
 # squid included: squid then resolves gateway.discord.gg to the relay, and the two
 # tunnel into each other until the relay's pids-limit stops them. Measured on
 # 2026-09-15. squid.conf's private_dst rule is the backstop for that mistake.
-if ! docker ps --format '{{.Names}}' | grep -qx oab-relay; then
-    docker rm -f oab-relay >/dev/null 2>&1 || true
-    docker run -d --name oab-relay --network oab-int \
-        --read-only \
-        --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
-        --pids-limit 32 --memory 32m --memory-swap 32m \
-        oab-relay:latest -d -d TCP-LISTEN:443,fork,reuseaddr \
-        PROXY:oab-proxy:gateway.discord.gg:443,proxyport=3128 >/dev/null
+if start_service oab-relay oab-relay:latest - \
+    --network oab-int \
+    --read-only \
+    --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+    --pids-limit 32 --memory 32m --memory-swap 32m \
+    oab-relay:latest -d -d TCP-LISTEN:443,fork,reuseaddr \
+    PROXY:oab-proxy:gateway.discord.gg:443,proxyport=3128; then
     echo "oab-relay started"
 fi
 
@@ -74,16 +123,15 @@ if [ -z "$RELAY_IP" ]; then
 fi
 
 # --- Token broker: the only container that holds the SA key ---
-if ! docker ps --format '{{.Names}}' | grep -qx oab-broker; then
-    docker rm -f oab-broker >/dev/null 2>&1 || true
-    docker run -d --name oab-broker --network oab-int \
-        --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
-        --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
-        --pids-limit 64 --memory 256m --memory-swap 256m \
-        -e HTTPS_PROXY=http://oab-proxy:3128 \
-        -e NO_PROXY=localhost,127.0.0.1,oab-proxy \
-        -v "$HOME/.config/openab/sa-key.json:/run/secrets/sa-key.json:ro" \
-        oab-broker:latest >/dev/null
+if start_service oab-broker oab-broker:latest - \
+    --network oab-int \
+    --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+    --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+    --pids-limit 64 --memory 256m --memory-swap 256m \
+    -e HTTPS_PROXY=http://oab-proxy:3128 \
+    -e NO_PROXY=localhost,127.0.0.1,oab-proxy \
+    -v "$HOME/.config/openab/sa-key.json:/run/secrets/sa-key.json:ro" \
+    oab-broker:latest; then
     echo "oab-broker started"
 fi
 

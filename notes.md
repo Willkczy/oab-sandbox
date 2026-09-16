@@ -804,3 +804,73 @@ thread 對應、reminders、multibot cache 每次重啟都歸零。`oab-pi-home`
 ### ⏳ 還沒量的
 
 - **resume。** 區域 gateway 主機不在 allowlist，也不在 `--add-host` 裡。
+
+---
+
+## 開發 ③：第一次真 Discord 對話暴露的兩個缺陷，外加 pi 往外連的來源（2026-09-15 晚上）
+
+分支 `fix/stale-containers-and-openab-volume`。
+
+### 1. `run.sh` 沿用舊容器 → 改成指紋 label
+
+原本的判斷只有「這個名字的容器在不在跑」。現在改走 `start_service()`：啟動時把 image ID、
+所有 `docker run` 參數、掛載的設定檔內容一起做 `cksum`，寫進 `oab.inputs` label。下次跑
+`run.sh` 時 label 對不上就重建，並印出原因。
+
+broker 的金鑰檔刻意不算進去。label 誰都能 `docker inspect`，連私鑰的 checksum 都不該放在那裡。
+
+沒有選「每次都重建」：那樣每次重跑 agent 都會把 squid 的 access.log 一起丟掉，而那是閘門唯一的紀錄。
+
+`learn/dev/03` 把 `run.sh` 裡的函式原文抽出來，對一個丟棄式容器跑六個情境。不直接跑 `run.sh`，
+因為它寫死 `oab-*` 名字，會把正在跑的 sandbox 換掉。
+
+| 情境 | 結果 |
+|---|---|
+| 1 沒有容器 | started，新 id，不說話 |
+| 2 什麼都沒改再跑 | reused，同一個 id |
+| 3 掛載的設定檔改了（9/15 那次） | 重建，印出原因 |
+| 4 某個 docker run 旗標改了 | 重建，印出原因 |
+| 5 舊 `run.sh` 留下、沒有 label 的容器 | 重建，印出原因 |
+| 6 停掉了但 label 相符 | started，不說話 |
+
+六個全過。情境 5 就是目前在跑的那組容器，下次遇到新 `run.sh` 時會發生的事。
+
+### 2. openab 的狀態 volume 是 root 的 → Dockerfile 先建目錄
+
+原因量到了：base image 裡有 `/home/node/.pi`（uid 1000），但沒有 `/home/node/.openab`。
+Docker 把 named volume 掛到 image 裡**已存在**的目錄上時，會把那個目錄的擁有者複製到空的
+volume；目錄不存在的話，掛載點就由 root 建立。所以 `.pi` 沒事，`.openab` 從 8/19 起就寫不進去。
+
+修法是 Dockerfile 裡一行 `mkdir -p /home/node/.openab && chown node:node /home/node/.openab`。
+
+意外的好消息：**已經是 root 的空 volume，換新 image 掛上去也會被改成 1000。** `learn/dev/04`：
+
+```
+ok the image: /home/node/.openab      1000
+ok the old state                      0, not writable
+ok half 1, new volume                 1000, writable
+ok half 2, the root-owned volume      1000, writable
+```
+
+所以真正的 `oab-openab-home` 不用刪。它一直是空的，因為 openab 從來沒寫進去過，下次用新 image
+啟動就會修好。重建後的 image 跑 `verify-hardening.sh` 全過。
+
+### 3. pi 往外連的那 5 次，來源追到了
+
+**pi.dev × 3 是 pi 的模型目錄刷新。** `main.js` 裡，rpc 模式且非 offline 時，啟動就在背景跑
+`modelRuntime.refresh()`。pi-ai 只對有憑證的 provider 走網路，這裡只有 `google-vertex`。請求走
+`utils/management-http.js` 的 `fetchWithRetry`，預設 `maxRetries = 2`，失敗立刻重試、不等待。
+squid 回 403 讓 fetch 丟錯，於是一次刷新變成 7 ms 內的三行。失敗不會寫入 `checkedAt`，所以每次
+pi 啟動都會再來一次。
+
+**registry.npmjs.org × 2 是 pi-acp 的更新提示。** `pi-acp/dist/index.js` 的 `buildUpdateNotice()`
+在**每個新 session** 都跑 `npm view @earendil-works/pi-coding-agent version`，timeout 800 ms，
+沒有任何開關。為什麼是兩條連線，沒有追進 npm 內部。
+
+**版本檢查不是來源。** `checkForNewPiVersion` 雖然也連 `pi.dev/api/latest-version`，但只在互動模式呼叫。
+
+`PI_OFFLINE=1` 能關掉 pi 那三條，關不掉 pi-acp 那兩條。沒有加，因為兩者被擋都不影響回答。
+
+順帶修正 Dockerfile 的一句舊描述。「pi 的模型目錄是編進 pi-ai 的靜態 JSON」在 0.84.2 已經不完全對：
+它啟動時會從 pi.dev 疊一層遠端目錄。sandbox 裡被 squid 擋掉，所以編進去的清單仍是全部；但在
+沒有閘門的 production 機器上，**不升級 pi，可用的模型清單也可能改變**。

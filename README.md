@@ -107,6 +107,9 @@ them keeps the full history without giving that property up, because the archive
 the host where the agent cannot reach it. **Do not add `learn/` to `run.sh`'s mount
 list**; that would hand the accumulated history straight back to the agent.
 
+`run.sh` can be re-run while the sandbox is up. It keeps `oab-proxy`, `oab-relay` and
+`oab-broker` only if each was started from the image, arguments and config it would use
+now, and recreates any that was not, saying so. It always recreates the agent.
 
 `verify-hardening.sh` is worth re-running after any change to `run.sh`, any image
 rebuild, or any Docker Desktop upgrade. It asserts capabilities are empty, the process
@@ -153,17 +156,6 @@ value in `config/config.toml`, and a hard error if neither is present.
   ([finding 8](docs/findings.md)). Discord directs a resumed session to a regional
   host such as `gateway-us-east1-b.discord.gg`, which neither the allowlist nor the
   relay's hosts entry covers, and what serenity does when that fails is not known.
-- **`run.sh` reuses containers that are already running, whatever changed.** It
-  starts `oab-proxy`, `oab-relay` and `oab-broker` only when they are absent, and
-  squid reads its configuration once, at start. Switching branches with the sandbox
-  up therefore left squid enforcing the old allowlist, and the bot stayed offline
-  with no error. Run `./stop.sh` before `./run.sh` after changing anything those
-  containers read.
-- **openab's own state does not persist.** The root of the `oab-openab-home`
-  volume is owned by root while openab runs as uid 1000, so it logs
-  `failed to persist thread mapping ... Permission denied` and starts every run
-  with an empty thread map, reminder list and cache. `oab-pi-home` is owned by
-  uid 1000 and is unaffected.
 - **`/proc/1/environ` is readable by the agent's own child processes**, which exposes
   `DISCORD_BOT_TOKEN` — the bot cannot function without it, so this is not fixable by
   removing the variable. `verify-hardening.sh` prints the leaked variable *names* (never
