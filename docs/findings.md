@@ -249,6 +249,14 @@ Four samples, one of them informative.
   openab, running as uid 1000, lost its thread map and reminders at every restart
   while logging only a WARN. Creating the directory in the Dockerfile fixed new
   volumes and the existing empty one alike; `learn/dev/04` checks both.
+- **The coach can answer from a month-old vault, and nothing says so.** `vault/`
+  is a clone, and nothing kept it current. On 2026-09-16 it was four weeks behind
+  the main vault, and a real Discord conversation had already been answered from
+  that snapshot. Every check in this repo asks what the agent can reach; none
+  asked whether what it reads is current. `vault-sync.sh` now carries notes both
+  ways, reviewing the direction the agent's writes travel, and `run.sh` and
+  `stop.sh` report drift. `learn/dev/05` checks it, including the empty `vault/`
+  Docker creates in a fresh clone, which git had mistaken for this repository.
 
 ---
 

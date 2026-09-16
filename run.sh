@@ -26,6 +26,13 @@ if [ -z "$DISCORD_BOT_TOKEN" ]; then
     exit 1
 fi
 
+# --- Is the vault the coach reads the one you have been practising in? ---
+#
+# vault/ is a clone, and nothing updates it on its own. On 2026-09-16 it turned
+# out to be four weeks behind the main vault, and the coach had been answering
+# from that snapshot without a word. This only reports; ./vault-sync.sh syncs.
+"$SANDBOX/vault-sync.sh" remind-start || true
+
 # --- Networks: oab-int is --internal (no route out); only oab-ext has one ---
 docker network inspect oab-int >/dev/null 2>&1 || docker network create --internal oab-int
 docker network inspect oab-ext >/dev/null 2>&1 || docker network create oab-ext
