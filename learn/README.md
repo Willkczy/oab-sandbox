@@ -36,6 +36,7 @@ two kinds, and the difference is how you read them, not how important they are:
 | `11-tmpfs-vs-volume.sh` | tmpfs (memory) vs volume (disk): who survives a restart | system layer, basics |
 | `12-shared-kernel-pid-namespace.sh` | one kernel under every container, and a PID namespace as a renumbered view of it | system layer, basics |
 | `13-discord-gateway-proxy.sh` | why one process obeys the proxy over REST and ignores it over websocket, and the relay that carries the websocket through | S3 |
+| `14-gate-dns-reliability.sh` | how long the gate keeps refusing after one failed lookup, and how to tell a failed lookup from a failed connection | S3 |
 
 ### Run during the walkthrough, not yet scripted
 
