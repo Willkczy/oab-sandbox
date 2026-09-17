@@ -955,3 +955,73 @@ iCloud 裡的 `.git` 被兩台同時寫會壞，`手機接入計劃.md` 早就�
 
 **為什麼查詢會失敗**還不知道。那台是每天睡醒幾十次的筆電，而沙箱正要搬到一台不睡的機器。
 `learn/14` 的 `watch` arm 就是為了在那台機器上量這件事。
+
+---
+
+## 搬到舊機：Intel、Colima、launchd（2026-09-17）
+
+舊機是 MacBook Pro、Intel x86_64、8GB、macOS 15.0，原本用 host 模式跑 production。
+
+### 🔴 Homebrew 已經不支援 Intel 了
+
+`brew install colima` 直接被擋下：Homebrew 從 2026 年 8 月宣布、9 月起不再為 Intel macOS
+出預編譯套件，這台會變成從原始碼編譯 qemu。另外還撞到 `/usr/local/share/man/man8` 不可寫，
+要 sudo 才能修。
+
+繞過的方式是完全不靠 Homebrew，也不需要 sudo：從 GitHub 與 docker.com 抓
+colima、lima、docker 的官方二進位檔放進 `~/.local`，VM 用 macOS 內建的 Virtualization
+framework（`--vm-type vz`）而不是 qemu，所以沒有東西要編譯。
+
+```
+colima start --vm-type vz --cpu 2 --memory 4 --disk 20
+docker server=29.5.2, cpus=2, mem=4GB
+```
+
+三個 image 在舊機 build 起來：sandbox 1.16GB、broker 353MB、relay 15MB。
+`verify-hardening.sh` 全過，包含 relay 的 7 項。
+
+磁碟本來只剩 12GB，刪掉 Hearthstone（12GB）之後變成 23GB。Xcode 沒有刪：它的內容屬於 root，
+需要 sudo，而且刪完要手動把 `xcode-select` 切到 CommandLineTools，否則這台的 git 會壞掉。
+
+### 🔴 舊機 iCloud 那份 vault 的 `.git` 是壞的
+
+從它 clone 會失敗：
+
+```
+fatal: unable to read tree 49d2cfc27a65f0d216a9475865c5855d2776911d
+warning: Clone succeeded, but checkout failed.
+git fsck: broken link from tree ab95059... to tree 49d2cfc...
+```
+
+commit 指標是對的（`c9acb6a`，跟主力機一樣），但物件不見了。先把 `.git` 底下 1133 個檔案
+全部讀過一遍（強迫 iCloud 下載），再 clone 一次，一樣失敗——所以不是「還沒下載」，是
+**iCloud 同步了檔案，卻沒有同步出一個可用的 repo**。`手機接入計劃.md` 早就把這件事列為雷。
+
+改成把主力機那份健康的 clone 直接 `scp` 過去（32MB），並且：
+
+- 移除 `origin`，讓舊機不會去碰那個壞掉的 repo
+- 設 `receive.denyCurrentBranch updateInstead`，讓主力機可以直接推進去
+
+同步方向因此固定成：主力機是樞紐，推給舊機、也從舊機 fetch 回來（`vault-sync.sh back` 已經
+支援 ssh 來源）。這條路只需要現有的「主力機 → 舊機」單向 SSH。
+
+### ✅ 切換與常駐
+
+停掉 `com.willkczy.openab`（launchd），沙箱用同一支 bot token 接手，log 出現
+`discord bot connected user=openab`。
+
+常駐用兩個 LaunchAgent（`deploy/install-service.sh`）：
+
+- `dev.oab.colima`：開機啟動 VM，一次就好
+- `dev.oab.sandbox`：跑 `deploy/start-sandbox.sh`，它等 VM、讀 token、`exec run.sh`；
+  離開就由 launchd 重啟
+
+分兩個 agent 的理由是失敗形態不同：會反覆重啟的那個，不該把它底下的 VM 一起重啟。
+`launchctl kickstart -k` 實測一分鐘內 bot 就重新連上。
+
+plist 裡沒有任何密鑰，token 留在 production 本來就在用的 `~/.config/openab/env.sh`。
+
+### ⏳ 還沒做的
+
+- crash 仍會丟掉 session log：封存是 `stop.sh` 做的，而 launchd 不會呼叫它。
+- 舊機上的 `learn/14` 與 `deploy/` 目前是未追蹤的複製檔，PR 併入 main 之後要改成 `git pull`。

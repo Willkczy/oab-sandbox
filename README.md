@@ -118,6 +118,28 @@ memory and pid ceilings are in place, for the relay as well as the agent. It als
 that the relay can still bind port 443 without privileges, which depends on a Docker
 default rather than on anything in this repo.
 
+## Running it always-on
+
+On a machine that does nothing else, launchd runs the sandbox:
+
+```sh
+./deploy/install-service.sh            # install and start
+./deploy/install-service.sh --remove   # stop and remove
+```
+
+Two agents, because they fail differently. `dev.oab.colima` starts the container VM
+once at login. `dev.oab.sandbox` runs `deploy/start-sandbox.sh`, which waits for that
+VM, reads the bot token from `~/.config/openab/env.sh`, and execs `run.sh`; launchd
+starts it again whenever it exits. Neither plist holds a secret. Both log to
+`~/Library/Logs/dev.oab.*.log`.
+
+Measured on 2026-09-17 on an Intel MacBook Pro with 8GB, running Colima rather than
+Docker Desktop: both agents come up from cold, and `launchctl kickstart -k` on the
+sandbox agent has the bot connected again within a minute.
+
+A crash still loses the session log. `stop.sh` is what archives it, and launchd does
+not call `stop.sh`.
+
 ## Layout
 
 | Path | What it is |
@@ -127,6 +149,7 @@ default rather than on anything in this repo.
 | `relay/` | The Discord gateway relay: socat alone in an alpine image, turning each connection into a `CONNECT` tunnel through squid. |
 | `proxy/squid.conf` | Egress allowlist, a bandwidth pool for `r.jina.ai`, and a rule that never tunnels into a private address. |
 | `vault-sync.sh` | Moves notes between `vault/` and the main vault, with a review in the direction that needs one. |
+| `deploy/` | The LaunchAgents for a machine that hosts the sandbox permanently, and the wrapper they run. |
 | `config/config.toml.example` | Template for the agent config. The real `config.toml` is gitignored. |
 | `config/pi-coach` | Model wrapper the agent invokes instead of `pi` directly. |
 | `config/adc-marker.json` | **Not a credential.** Deliberately invalid JSON that only exists to satisfy pi's `fileExists` gate; anything that actually parses it fails loudly, which is the point. |

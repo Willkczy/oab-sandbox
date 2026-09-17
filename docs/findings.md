@@ -249,6 +249,15 @@ Four samples, one of them informative.
   openab, running as uid 1000, lost its thread map and reminders at every restart
   while logging only a WARN. Creating the directory in the Dockerfile fixed new
   volumes and the existing empty one alike; `learn/dev/04` checks both.
+- **A `.git` inside iCloud Drive is not a repository on every machine.** The
+  vault's copy on the second machine sat at the same commit as the first and was
+  missing a tree object: `git fsck` reported a broken link from a tree that was
+  there to one that was not, and cloning from it failed at checkout while
+  claiming success. The first machine's copy was intact, so iCloud had replicated
+  the files without replicating a usable repository. The sandbox on that machine
+  was given a copy of the healthy clone instead, with `receive.denyCurrentBranch
+  updateInstead` so the first machine can push into it, and no `origin` at all so
+  that nothing pulls from the broken one.
 - **The coach can answer from a month-old vault, and nothing says so.** `vault/`
   is a clone, and nothing kept it current. On 2026-09-16 it was four weeks behind
   the main vault, and a real Discord conversation had already been answered from
