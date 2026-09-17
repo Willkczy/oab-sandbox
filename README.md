@@ -27,7 +27,7 @@ and a script that reported a week-old number without ever erroring.
 
 ## If you have five minutes
 
-1. [docs/findings.md](docs/findings.md) — the eight findings. Start here.
+1. [docs/findings.md](docs/findings.md) — the nine findings. Start here.
 2. [`learn/10-model-compliance-eval.sh`](learn/10-model-compliance-eval.sh) — the
    header says why the coaching rule can only be measured, never enforced.
    [`learn/lib/grade_compliance.py`](learn/lib/grade_compliance.py) says where the
