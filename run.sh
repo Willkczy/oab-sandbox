@@ -8,11 +8,13 @@
 #   S4 keys     : no sa-key is mounted anywhere; tokens come from oab-broker
 #
 # Usage:
-#   export DISCORD_BOT_TOKEN=<token of the *second* bot>
+#   export DISCORD_BOT_TOKEN=<a token no other instance is using>
 #   ./run.sh
 #
-# NOTE: this is not a long-running service. Run ./stop.sh when finished --
-# production still lives on the other machine.
+# On a machine you also use, this is not a long-running service: run ./stop.sh
+# when finished. On the machine that hosts it permanently,
+# deploy/install-service.sh runs it under launchd instead, and ./stop.sh there
+# only stops it until launchd starts it again.
 
 set -e
 
@@ -21,8 +23,8 @@ set -e
 SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 if [ -z "$DISCORD_BOT_TOKEN" ]; then
-    echo "DISCORD_BOT_TOKEN is not set. It must be the *second* bot token --" >&2
-    echo "sharing one with production means both instances answer every message." >&2
+    echo "DISCORD_BOT_TOKEN is not set. It must be a token no other instance is" >&2
+    echo "using: two instances on one token answer every message twice." >&2
     exit 1
 fi
 
