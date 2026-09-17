@@ -502,8 +502,14 @@ log. The directive is now in `proxy/squid.conf`.
 
 This explains how long each outage lasted, not why the lookups failed in the first
 place. That host was a laptop that slept and woke dozens of times a day, and the
-sandbox is moving to a machine that stays awake. `learn/14`'s `watch` arm is for
-measuring it there.
+sandbox has since moved to a machine that stays awake.
+
+Two half-hour windows on 2026-09-17, one on each machine, sampled 355 and 357
+rounds and found nothing: every IPv4 lookup and every CONNECT succeeded. That is
+what a null result looks like against a fault that arrives in bursts an hour
+apart, and it rules nothing out. The measurement that can settle it costs nothing
+now that the sandbox is the always-on bot: squid's own `access.log` on that
+machine, counted for `HIER_NONE` across a day.
 
 ---
 
