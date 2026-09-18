@@ -912,3 +912,116 @@ iCloud 裡的 `.git` 被兩台同時寫會壞，`手機接入計劃.md` 早就�
 `vault/`。這樣主 vault 的 `.git` 永遠只有一台在寫。
 
 `learn/dev/05` 九個情境全過，測試 repo 的路徑刻意含空格、筆記刻意用中文檔名，跟真的 vault 一樣。
+
+---
+
+## 🔴 閘門記住失敗的時間，比失敗本身還長（2026-09-17）
+
+### 線索在「失敗有多快」
+
+9/15 那台放著跑 16 小時的沙箱，gateway 斷了 19 次。squid 記了 236 次 `TCP_TUNNEL/503`，其中
+215 次是 `HIER_NONE/-`，代表連位址都沒選到，也就是查名字就失敗了。
+
+真正的線索不是失敗次數，是**每次只花 0 到 11 毫秒**。沒有任何查詢會這麼快失敗。那是快取。
+
+### 兩次走錯路，而且都學到東西
+
+**(a) IPv6 是錯的方向。** squid 啟動時開了 `[::]` 的 DNS socket，所以原本懷疑 AAAA 查詢卡住。
+探針顯示 AAAA 每次都失敗——但原因是 `gateway.discord.gg` **根本沒有 AAAA 記錄**（`dig` 確認）。
+固定發生的事，解釋不了間歇發生的故障。
+
+**(b) 把閘門的網路拔掉，重現的是另一種故障。** 用 `docker network disconnect` 切斷 proxy 對外
+網路，squid 記的是 `HIER_DIRECT/<位址>`：它用快取解析出位址、連不上。而且網路一接回來就立刻恢復。
+原因是 squid 對**成功**的解析預設記 6 小時，所以短暫的 resolver 中斷它根本感覺不到——實測中斷
+30 秒期間有 14 次 CONNECT 照樣成功。
+
+第一次寫的時候還有兩個 bug：取樣容器只接內網（本來就解析不到任何東西），以及計數用
+`grep 'A=FAIL'` 連 `AAAA=FAIL` 也數進去。兩個都是「看起來有數據、其實在量別的東西」。
+
+### ✅ 正確的重現方式
+
+讓 squid 用一個我可以隨時關掉的 resolver（socat 轉發 UDP 53），再把正向快取縮短成 5 秒，
+讓快取在中斷期間過期。這時才重現出 `HIER_NONE`。關鍵是 resolver 回來之後：
+
+| squid.conf | resolver 回來後多久恢復 |
+|---|---|
+| 原本的設定 | 40 秒 |
+| 加上 `negative_dns_ttl 1 second` | 5 秒 |
+
+預設值是 60 秒。一次真的查詢失敗，就換來一分鐘的「立刻拒絕」，而客戶端每 5 秒重試一次——
+這正好就是 log 裡那種一叢一叢的失敗。設定已經加進 `proxy/squid.conf`。
+
+### 還沒解釋的
+
+**為什麼查詢會失敗**還不知道。那台是每天睡醒幾十次的筆電，而沙箱正要搬到一台不睡的機器。
+`learn/14` 的 `watch` arm 就是為了在那台機器上量這件事。
+
+---
+
+## 搬到舊機：Intel、Colima、launchd（2026-09-17）
+
+舊機是 MacBook Pro、Intel x86_64、8GB、macOS 15.0，原本用 host 模式跑 production。
+
+### 🔴 Homebrew 已經不支援 Intel 了
+
+`brew install colima` 直接被擋下：Homebrew 從 2026 年 8 月宣布、9 月起不再為 Intel macOS
+出預編譯套件，這台會變成從原始碼編譯 qemu。另外還撞到 `/usr/local/share/man/man8` 不可寫，
+要 sudo 才能修。
+
+繞過的方式是完全不靠 Homebrew，也不需要 sudo：從 GitHub 與 docker.com 抓
+colima、lima、docker 的官方二進位檔放進 `~/.local`，VM 用 macOS 內建的 Virtualization
+framework（`--vm-type vz`）而不是 qemu，所以沒有東西要編譯。
+
+```
+colima start --vm-type vz --cpu 2 --memory 4 --disk 20
+docker server=29.5.2, cpus=2, mem=4GB
+```
+
+三個 image 在舊機 build 起來：sandbox 1.16GB、broker 353MB、relay 15MB。
+`verify-hardening.sh` 全過，包含 relay 的 7 項。
+
+磁碟本來只剩 12GB，刪掉 Hearthstone（12GB）之後變成 23GB。Xcode 沒有刪：它的內容屬於 root，
+需要 sudo，而且刪完要手動把 `xcode-select` 切到 CommandLineTools，否則這台的 git 會壞掉。
+
+### 🔴 舊機 iCloud 那份 vault 的 `.git` 是壞的
+
+從它 clone 會失敗：
+
+```
+fatal: unable to read tree 49d2cfc27a65f0d216a9475865c5855d2776911d
+warning: Clone succeeded, but checkout failed.
+git fsck: broken link from tree ab95059... to tree 49d2cfc...
+```
+
+commit 指標是對的（`c9acb6a`，跟主力機一樣），但物件不見了。先把 `.git` 底下 1133 個檔案
+全部讀過一遍（強迫 iCloud 下載），再 clone 一次，一樣失敗——所以不是「還沒下載」，是
+**iCloud 同步了檔案，卻沒有同步出一個可用的 repo**。`手機接入計劃.md` 早就把這件事列為雷。
+
+改成把主力機那份健康的 clone 直接 `scp` 過去（32MB），並且：
+
+- 移除 `origin`，讓舊機不會去碰那個壞掉的 repo
+- 設 `receive.denyCurrentBranch updateInstead`，讓主力機可以直接推進去
+
+同步方向因此固定成：主力機是樞紐，推給舊機、也從舊機 fetch 回來（`vault-sync.sh back` 已經
+支援 ssh 來源）。這條路只需要現有的「主力機 → 舊機」單向 SSH。
+
+### ✅ 切換與常駐
+
+停掉 `com.willkczy.openab`（launchd），沙箱用同一支 bot token 接手，log 出現
+`discord bot connected user=openab`。
+
+常駐用兩個 LaunchAgent（`deploy/install-service.sh`）：
+
+- `dev.oab.colima`：開機啟動 VM，一次就好
+- `dev.oab.sandbox`：跑 `deploy/start-sandbox.sh`，它等 VM、讀 token、`exec run.sh`；
+  離開就由 launchd 重啟
+
+分兩個 agent 的理由是失敗形態不同：會反覆重啟的那個，不該把它底下的 VM 一起重啟。
+`launchctl kickstart -k` 實測一分鐘內 bot 就重新連上。
+
+plist 裡沒有任何密鑰，token 留在 production 本來就在用的 `~/.config/openab/env.sh`。
+
+### ⏳ 還沒做的
+
+- crash 仍會丟掉 session log：封存是 `stop.sh` 做的，而 launchd 不會呼叫它。
+- 舊機上的 `learn/14` 與 `deploy/` 目前是未追蹤的複製檔，PR 併入 main 之後要改成 `git pull`。
