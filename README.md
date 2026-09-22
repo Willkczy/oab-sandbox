@@ -134,8 +134,12 @@ starts it again whenever it exits. Neither plist holds a secret. Both log to
 `~/Library/Logs/dev.oab.*.log`.
 
 Measured on 2026-09-17 on an Intel MacBook Pro with 8GB, running Colima rather than
-Docker Desktop: both agents come up from cold, and `launchctl kickstart -k` on the
-sandbox agent has the bot connected again within a minute.
+Docker Desktop: `launchctl kickstart -k` on the sandbox agent has the bot connected
+again within a minute. A start from cold was not measured, though this section once
+said it was. The VM that day had been started by hand, and `dev.oab.colima` had
+failed at install, unable to find `limactl` on launchd's PATH, which went unnoticed
+for five days. It now runs cleanly against a VM that is already up; a reboot is the
+test it has still not had.
 
 A crash still loses the session log. `stop.sh` is what archives it, and launchd does
 not call `stop.sh`.
