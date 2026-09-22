@@ -69,7 +69,13 @@ cat > "$AGENTS/$COLIMA_LABEL.plist" <<PLIST
   <key>StandardOutPath</key><string>$LOGS/$COLIMA_LABEL.log</string>
   <key>StandardErrorPath</key><string>$LOGS/$COLIMA_LABEL.log</string>
   <key>EnvironmentVariables</key>
-  <dict><key>HOME</key><string>$HOME</string></dict>
+  <dict>
+    <key>HOME</key><string>$HOME</string>
+    <!-- launchd starts a job with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and colima
+         runs limactl by name. Without this the agent exits 1 at login and the VM
+         never starts. Same list as deploy/start-sandbox.sh. -->
+    <key>PATH</key><string>$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
 </dict>
 </plist>
 PLIST
