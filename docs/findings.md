@@ -448,12 +448,66 @@ What it costs:
 
 ---
 
+## 9. The gate remembered a failure for longer than the failure lasted
+
+An idle sandbox left running overnight on 2026-09-15 lost the Discord gateway
+nineteen times in sixteen hours. squid's log has the shape of it: 236 gateway
+CONNECTs answered `TCP_TUNNEL/503`, and 215 of those as
+
+```
+172.20.0.3 TCP_TUNNEL/503 0 CONNECT gateway.discord.gg:443 - HIER_NONE/- -
+```
+
+`HIER_NONE` means squid never picked an address, so the lookup failed. Two things
+about those lines did not fit a network that was merely down. They arrived five
+seconds apart, which is serenity's retry interval, and each took between 0 and 11
+milliseconds. Nothing resolves a name that fast and fails. That is a cache.
+
+`learn/14-gate-dns-reliability.sh` measures it, and its two wrong turns are worth
+as much as the result:
+
+- **IPv6 was the first suspicion, and it is wrong.** squid opens a DNS socket on
+  `[::]` and asks for both records, and every AAAA lookup in the probe failed.
+  They failed because `gateway.discord.gg` publishes no IPv6 address at all. A
+  constant cannot explain an intermittent failure.
+- **Taking the gate's internet away reproduces a different fault.** Disconnecting
+  the proxy from the external network made squid log `TCP_TUNNEL/503
+  HIER_DIRECT/<address>` — it resolved from cache and failed to connect — and it
+  recovered the instant the network returned. A successful lookup is held for six
+  hours by default, so a short resolver outage is invisible: fourteen CONNECTs in
+  a row succeeded straight through one.
+
+Pointing squid at a resolver the experiment can switch off, and shortening the
+positive cache so the entry expires inside the window, reproduces the real shape:
+`HIER_NONE`, for as long as the resolver is gone. What happens after it comes back
+is the finding.
+
+| `proxy/squid.conf` | gate working again after the resolver returned |
+|---|---|
+| as it stood | 40 seconds |
+| plus `negative_dns_ttl 1 second` | 5 seconds |
+
+The default is 60 seconds. One failed lookup bought a minute of instant refusals
+while the client retried every five, which is exactly the bursts in the overnight
+log. The directive is now in `proxy/squid.conf`.
+
+This explains how long each outage lasted, not why the lookups failed in the first
+place. That host was a laptop that slept and woke dozens of times a day, and the
+sandbox is moving to a machine that stays awake. `learn/14`'s `watch` arm is for
+measuring it there.
+
+---
+
 ## Still open
 
 - **A crash takes the session log with it.** `stop.sh` archives the log before
   removing the container, which covers an ordinary stop. A container that dies on
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
+- **Why the gate's lookups fail at all.** Finding 9 explains the length of each
+  outage and not its cause. The `watch` arm of `learn/14` is meant to run for half
+  an hour on the machine that hosts the sandbox, which is not the laptop it was
+  written on.
 - **A Discord resume.** A real conversation runs over the relay, but a session
   resumed on a regional gateway host, which the allowlist does not name, has not
   been measured.
