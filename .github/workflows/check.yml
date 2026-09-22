@@ -1,0 +1,40 @@
+# The static half of the checklist in AGENTS.md, run on every pull request:
+# shell scripts parse, python compiles, the broker parses.
+#
+# It does not replace the other half. verify-hardening.sh needs Docker and the
+# three built images, and the learn/ scripts need containers or a real Vertex
+# call. Those still run by hand before a merge, as AGENTS.md says.
+#
+# The runner's sh is dash, stricter than the bash-as-sh on macOS, so a bashism
+# that works on the machine that wrote it fails here. That is the point.
+
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a commit rather than a tag: a tag can be moved to other code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Shell scripts parse under a POSIX sh
+        run: |
+          status=0
+          for f in $(git ls-files '*.sh') config/pi-coach; do
+            sh -n "$f" || { echo "::error file=$f::does not parse under sh"; status=1; }
+          done
+          exit $status
+
+      - name: Python files compile
+        run: git ls-files '*.py' | xargs python3 -m py_compile
+
+      - name: The broker parses
+        run: node --check broker/server.js
