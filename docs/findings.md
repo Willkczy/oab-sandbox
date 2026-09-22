@@ -249,6 +249,15 @@ Four samples, one of them informative.
   openab, running as uid 1000, lost its thread map and reminders at every restart
   while logging only a WARN. Creating the directory in the Dockerfile fixed new
   volumes and the existing empty one alike; `learn/dev/04` checks both.
+- **A `.git` inside iCloud Drive is not a repository on every machine.** The
+  vault's copy on the second machine sat at the same commit as the first and was
+  missing a tree object: `git fsck` reported a broken link from a tree that was
+  there to one that was not, and cloning from it failed at checkout while
+  claiming success. The first machine's copy was intact, so iCloud had replicated
+  the files without replicating a usable repository. The sandbox on that machine
+  was given a copy of the healthy clone instead, with `receive.denyCurrentBranch
+  updateInstead` so the first machine can push into it, and no `origin` at all so
+  that nothing pulls from the broken one.
 - **The coach can answer from a month-old vault, and nothing says so.** `vault/`
   is a clone, and nothing kept it current. On 2026-09-16 it was four weeks behind
   the main vault, and a real Discord conversation had already been answered from
@@ -493,8 +502,14 @@ log. The directive is now in `proxy/squid.conf`.
 
 This explains how long each outage lasted, not why the lookups failed in the first
 place. That host was a laptop that slept and woke dozens of times a day, and the
-sandbox is moving to a machine that stays awake. `learn/14`'s `watch` arm is for
-measuring it there.
+sandbox has since moved to a machine that stays awake.
+
+Two half-hour windows on 2026-09-17, one on each machine, sampled 355 and 357
+rounds and found nothing: every IPv4 lookup and every CONNECT succeeded. That is
+what a null result looks like against a fault that arrives in bursts an hour
+apart, and it rules nothing out. The measurement that can settle it costs nothing
+now that the sandbox is the always-on bot: squid's own `access.log` on that
+machine, counted for `HIER_NONE` across a day.
 
 ---
 

@@ -42,7 +42,14 @@ if docker ps --format '{{.Names}}' | grep -qx oab-sandbox; then
 fi
 
 docker rm -f oab-sandbox oab-relay oab-broker oab-proxy >/dev/null 2>&1 || true
-echo "sandbox stopped. production on the other machine is unaffected."
+echo "sandbox stopped."
+
+# On the machine that hosts the sandbox permanently, launchd starts it again
+# within seconds, which looks like stop.sh having done nothing at all.
+if launchctl print "gui/$(id -u)/dev.oab.sandbox" >/dev/null 2>&1; then
+    echo "the launchd agent will start it again. To keep it down:"
+    echo "  launchctl bootout gui/$(id -u)/dev.oab.sandbox"
+fi
 
 # --- What this session wrote into vault/ has not reached the main vault ---
 #
