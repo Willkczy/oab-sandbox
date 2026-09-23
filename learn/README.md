@@ -20,6 +20,9 @@ two kinds, and the difference is how you read them, not how important they are:
 - Numeric prefixes follow the main walkthrough. **Side tracks take a word
   prefix instead** (`chain-`) so parallel sessions do not collide on the same
   number
+- The scripts that make a real Vertex call resolve the GCP project id through
+  `lib/project-id.sh`: `$GOOGLE_CLOUD_PROJECT` if it is exported, otherwise the
+  value in `config/config.toml`, and a hard error if neither is there
 - **Every script is run from the repository root** (`./learn/...`), never from
   inside `learn/`. They resolve `lib/` relative to the root, so the working
   directory is part of the contract rather than a convenience
@@ -61,8 +64,9 @@ here so the gap stays visible rather than becoming folklore:
 ## Development verifications — `dev/`
 
 These accepted a change rather than taught a concept, so each one is listed with
-the write-up it belongs to. The build log behind them is `notes.md`, which is in
-Chinese; `docs/findings.md` is the English account and the one to read first.
+the write-up it belongs to. The build log behind them is `docs/build-log.zh.md`,
+which is in Chinese; `docs/findings.md` is the English account and the one to
+read first.
 
 ### development ① — moving sessions onto tmpfs
 

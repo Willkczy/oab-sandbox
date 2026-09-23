@@ -10,8 +10,10 @@ first time; do not write it in another language and plan to translate later.
 
 Two deliberate exceptions, both already in place:
 
-- **`notes.md`** is the raw chronological build log and stays in Chinese. Its
-  distillation, `docs/findings.md`, is the English document meant for readers.
+- **`docs/build-log.zh.md`** is the raw chronological build log and stays in
+  Chinese. Its distillation, `docs/findings.md`, is the English document meant
+  for readers. The `.zh` in the name is there so nobody opens it expecting
+  otherwise.
 - **A handful of strings that must not be translated**, because translating them
   would break or invalidate what they touch:
   - `learn/05` and `learn/08` reference paths and headings inside `vault/`, which
@@ -89,7 +91,7 @@ looking at it — reviewing what an agent changed is the point of the gate.
 Findings are part of the deliverable, not a postscript:
 
 - something surprising discovered while building or debugging goes into
-  `notes.md` as it happens, with the date
+  `docs/build-log.zh.md` as it happens, with the date
 - once it is understood, it becomes an entry in `docs/findings.md` in the shape
   the other entries use: what was assumed, what happened, what changed
 - a finding that changes how the system should be used belongs in `README.md`

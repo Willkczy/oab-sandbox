@@ -1,7 +1,7 @@
 #!/bin/sh
 # Verify that run.sh's hardening flags actually took effect, against the
-# measured conclusions recorded under S2 in notes.md. Re-run this after any
-# change to run.sh, any image rebuild, or any Docker Desktop upgrade.
+# measured conclusions recorded under S2 in docs/build-log.zh.md. Re-run this
+# after any change to run.sh, any image rebuild, or any Docker Desktop upgrade.
 #
 # Usage: ./verify-hardening.sh
 set -e
@@ -73,7 +73,7 @@ check "pids limit"          "32"          "$(in_relay 'cat /sys/fs/cgroup/pids.m
 check "443 bindable unprivileged" "0"     "$(in_relay 'cat /proc/sys/net/ipv4/ip_unprivileged_port_start')"
 
 echo
-echo "=== PID 1 environment leak (open issue, see S2 in notes.md) ==="
+echo "=== PID 1 environment leak (open issue, see S2 in docs/build-log.zh.md) ==="
 # The list of PID 1 environment variable names a compromised agent child
 # process can read. Names only, never values -- this script has no business
 # writing a secret to the terminal itself.

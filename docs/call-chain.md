@@ -104,7 +104,7 @@ docker exec oab-proxy tail -20 /var/log/squid/access.log
    the same network can collect a ticket. If caller identity were added, which
    layer of this architecture should carry it?
 3. `env_clear` in step 1 guarantees the agent's own environment is clean, yet
-   `/proc/1/environ` still leaks (see S2 in `notes.md`). Where exactly is the
+   `/proc/1/environ` still leaks (see S2 in `docs/build-log.zh.md`). Where exactly is the
    line between those two facts?
 4. Which steps in this chain can prompt injection reach, and which are entirely
    outside the model's influence?
