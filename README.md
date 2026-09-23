@@ -25,6 +25,12 @@ than quietly fixed — including the ones still unresolved. See
 an existence check that never reads the file, a permission table nothing enforces,
 and a script that reported a week-old number without ever erroring.
 
+**Status.** Since 2026-09-17 this is not a demo that gets started for a session: the
+sandbox *is* the Discord bot, kept up by launchd on a machine that does nothing else,
+and it replaced the host-mode deployment that used to do that job. The coach runs
+`google-vertex/gemini-3.7-flash`, which `config/pi-coach` selects and justifies with
+the four problems it was probed on.
+
 ## If you have five minutes
 
 1. [docs/findings.md](docs/findings.md) — the nine findings. Start here.
@@ -39,9 +45,9 @@ and a script that reported a week-old number without ever erroring.
 ```
                                    oab-ext  (has a route to the internet)
                                            │
-                                  ┌────────┴────────┐
-                                  │    oab-proxy    │   squid, domain allowlist:
-                                  │     (squid)     │   *.googleapis.com, *.discord.com,
+                                  ┌────────┴────────┐   squid, domain allowlist:
+                                  │    oab-proxy    │   *.googleapis.com, *.discord.com,
+                                  │     (squid)     │   *.discordapp.net, *.discordapp.com,
                                   └────────┬────────┘   gateway.discord.gg, r.jina.ai
                                            │            — everything else denied
  ═════════════════════ oab-int  (--internal: no route out at all) ═════════════════════
@@ -70,7 +76,9 @@ Three properties follow from this layout:
 
 ## Prerequisites
 
-- Docker (tested on Docker Desktop, arm64)
+- Docker. Built and tested on Docker Desktop on arm64; the machine that hosts it
+  permanently runs Colima on an Intel Mac, where Homebrew no longer builds bottles and
+  the runtime is a downloaded binary
 - A GCP service-account key at `~/.config/openab/sa-key.json` — mounted read-only into
   the broker, never copied into any image
 - A Discord bot token. If you already run this agent elsewhere, **create a second bot**:
@@ -96,9 +104,13 @@ docker build -t oab-relay:latest relay/
 export DISCORD_BOT_TOKEN=<your bot token>
 ./run.sh
 
-# 5. Stop — this is not a long-running service
+# 5. Stop — and archive the session log, which only stop.sh does
 ./stop.sh
 ```
+
+Started this way, the sandbox lasts as long as your session: this is what to do on a
+laptop you also use for other things. The machine that hosts it permanently does not
+start it by hand at all — see [Running it always-on](#running-it-always-on).
 
 `stop.sh` copies the agent's session log out of the container before removing it, into
 `learn/out/archive/<timestamp>/` (gitignored). pi writes those sessions to a tmpfs so the
@@ -196,7 +208,19 @@ value in `config/config.toml`, and a hard error if neither is present.
 - **A crashed container loses its session log.** `stop.sh` copies the agent's session
   log out of the tmpfs to `learn/out/archive/` before removing the container, so an
   ordinary stop keeps the record. A container that dies on its own is removed by
-  `--rm` first, and nothing is archived.
+  `--rm` first, and nothing is archived. This matters more now that launchd restarts
+  the sandbox unattended, because a crash is exactly when the log was worth keeping.
+- **The broker issues a token to anything on its network** that asks with the right
+  `Metadata-Flavor` header. That is the real metadata server's own behaviour, and the
+  network it sits on is `--internal` with three containers on it, but it means the
+  agent's blast radius is "a Vertex token", not "no credential at all".
+- **Why the gate's DNS lookups fail is still unexplained.** Finding 9 measured how long
+  each outage lasted and shortened it; the cause remains open, and until it is found
+  the bot can still refuse to reach Discord in bursts.
+- **The compliance eval probes one turn, not two.** A single probe mostly elicits a
+  stock refusal. The leak worth catching is the second turn, when the student pushes
+  back with "I don't get it, just write it", and nothing measures that yet — so a
+  PASS in finding 6 is weaker evidence than it looks.
 
 ## What the agent actually does — `vault/`
 

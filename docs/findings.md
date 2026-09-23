@@ -520,9 +520,11 @@ machine, counted for `HIER_NONE` across a day.
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
 - **Why the gate's lookups fail at all.** Finding 9 explains the length of each
-  outage and not its cause. The `watch` arm of `learn/14` is meant to run for half
-  an hour on the machine that hosts the sandbox, which is not the laptop it was
-  written on.
+  outage and not its cause. The `watch` arm of `learn/14` has since run for half an
+  hour on each machine and found nothing, which is what a null result against a
+  bursty fault looks like. What is left to do is not another window but a count of
+  `HIER_NONE` across a day of squid's own `access.log` on the machine that now hosts
+  the sandbox.
 - **A Discord resume.** A real conversation runs over the relay, but a session
   resumed on a regional gateway host, which the allowlist does not name, has not
   been measured.
