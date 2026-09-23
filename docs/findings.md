@@ -1,7 +1,7 @@
 # Findings
 
 Things this project got wrong on the first attempt, and what measuring them
-revealed. The chronological build log lives in `notes.md` (in Chinese); this is
+revealed. The chronological build log lives in `build-log.zh.md` (in Chinese); this is
 the part worth reading on its own.
 
 Each finding follows the same shape: what the plan assumed, what actually

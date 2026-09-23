@@ -7,7 +7,7 @@
 #                  Not HTTP, not sockets, not files.
 # Why it matters : that choice forces them to be parent and child processes,
 #                  which is precisely why the /proc/1/environ leak recorded under
-#                  S2 in notes.md cannot be closed
+#                  S2 in docs/build-log.zh.md cannot be closed
 # Re-run         : ./learn/06-message-path-to-pi.sh
 #
 # Worth re-running after a pi-acp upgrade, to confirm the wiring has not changed.
