@@ -37,6 +37,33 @@ boot_out() {   # a label that is not loaded is not an error here
     launchctl bootout "$DOMAIN/$1" 2>/dev/null || true
 }
 
+# Replace a running agent with the plist just written.
+#
+# `launchctl bootout` returns before the job is gone, and bootstrapping a label
+# that is still loaded fails with `Bootstrap failed: 5: Input/output error`. On
+# 2026-09-26 that killed this script between booting the agents out and
+# bootstrapping them again, and left the bot down until someone noticed. So wait
+# for the label to disappear, and let the bootstrap retry while the previous
+# container is still shutting down.
+reload() {   # reload <label> <plist>
+    launchctl bootout "$DOMAIN/$1" 2>/dev/null || true
+    i=0
+    while launchctl print "$DOMAIN/$1" >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    i=0
+    until launchctl bootstrap "$DOMAIN" "$2" 2>/dev/null; do
+        i=$((i + 1))
+        if [ "$i" -ge 10 ]; then
+            echo "could not bootstrap $1; run: launchctl bootstrap $DOMAIN $2" >&2
+            return 1
+        fi
+        sleep 2
+    done
+    echo "  loaded $1"
+}
+
 if [ "${1:-}" = "--remove" ]; then
     boot_out "$WATCHDOG_LABEL"
     boot_out "$SANDBOX_LABEL"
@@ -133,12 +160,11 @@ cat > "$AGENTS/$WATCHDOG_LABEL.plist" <<PLIST
 </plist>
 PLIST
 
-boot_out "$WATCHDOG_LABEL"
-boot_out "$SANDBOX_LABEL"
-boot_out "$COLIMA_LABEL"
-launchctl bootstrap "$DOMAIN" "$AGENTS/$COLIMA_LABEL.plist"
-launchctl bootstrap "$DOMAIN" "$AGENTS/$SANDBOX_LABEL.plist"
-launchctl bootstrap "$DOMAIN" "$AGENTS/$WATCHDOG_LABEL.plist"
+# The sandbox is reloaded last of the two that matter, and the watchdog after it,
+# so a failure here leaves as much running as possible rather than as little.
+reload "$COLIMA_LABEL" "$AGENTS/$COLIMA_LABEL.plist"
+reload "$SANDBOX_LABEL" "$AGENTS/$SANDBOX_LABEL.plist"
+reload "$WATCHDOG_LABEL" "$AGENTS/$WATCHDOG_LABEL.plist"
 
 echo "installed:"
 echo "  $AGENTS/$COLIMA_LABEL.plist"
