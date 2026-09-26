@@ -77,15 +77,22 @@ On a machine that does nothing else, launchd runs the sandbox:
 ./deploy/install-service.sh --remove   # stop and remove
 ```
 
-Two agents, because they fail differently:
+Three agents, because they fail differently:
 
 - **`dev.oab.colima`** starts the container VM, once, at login.
 - **`dev.oab.sandbox`** runs `deploy/start-sandbox.sh`, which waits for that VM,
   reads the bot token from `~/.config/openab/env.sh`, and execs `run.sh`.
   launchd starts it again whenever it exits.
+- **`dev.oab.watchdog`** runs `deploy/watchdog.sh` every five minutes, and
+  restarts the sandbox agent when the gateway has stopped carrying heartbeats.
 
 A restarting sandbox must never restart the VM under it, which is why they are
-two agents and not one. Neither plist holds a secret — a LaunchAgent plist is
+separate agents and not one.
+
+The watchdog exists because staying up is not the same as staying connected.
+Finding 10 is the eight days this cost. It watches the relay's byte counters,
+since the relay carries the gateway websocket and nothing else, and acts after
+two silent checks in a row. Neither plist holds a secret — a LaunchAgent plist is
 world-readable, so the token stays in the environment file. Both log to
 `~/Library/Logs/dev.oab.*.log`.
 
@@ -95,6 +102,13 @@ a minute. A start from cold has not been measured. The VM that day had been
 started by hand, and `dev.oab.colima` had failed at install, unable to find
 `limactl` on launchd's PATH, and that went unnoticed for five days. It now has
 the PATH it needs, and a reboot is the test it has still not had.
+
+Measured on 2026-09-26: freezing the agent container with `docker pause`, which
+leaves every container up and the tunnel open while the heartbeats stop, had the
+watchdog restart it on its second check and the bot connected again 45 seconds
+later. The installer was fixed the same day — `launchctl bootout` returns before
+the job is gone, and bootstrapping too soon failed, which left the bot down until
+someone looked.
 
 ---
 
