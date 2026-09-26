@@ -1025,3 +1025,50 @@ plist 裡沒有任何密鑰，token 留在 production 本來就在用的 `~/.con
 
 - crash 仍會丟掉 session log：封存是 `stop.sh` 做的，而 launchd 不會呼叫它。
 - 舊機上的 `learn/14` 與 `deploy/` 目前是未追蹤的複製檔，PR 併入 main 之後要改成 `git pull`。
+
+---
+
+## 🔴 Bot 聾了八天，而每個指標都說它很好（2026-09-26）
+
+使用者回報 Discord 沒有回應。查下去的時候，所有「還活著」的訊號都是正常的：
+
+- `docker ps`：四個容器都在跑，agent 還標著 healthy
+- relay：有一條活的 gateway 隧道
+- squid：那條隧道每隔幾小時就換一條新的，看起來就像正常的重連
+- **openab 的 log：9/18 19:17 之後整整八天沒有任何一行**
+- 最後一次真的處理訊息：9/17 22:26
+
+一個 `launchctl kickstart -k` 幾秒內就修好了。也就是說：**行程活著、連線活著、session 死了。**
+
+### 為什麼查不到原因
+
+serenity 把 shard 的死亡記在 WARN，而 openab 預設的 log 等級不顯示它。這跟 finding 8 是同一個
+盲點，只是那次是「開 debug 才看得到」，這次是「沒開就八天沒證據」。
+
+修法是在 `run.sh` 傳 `RUST_LOG=info`。改完第一次重啟，log 就出現了這台機器從來沒印過的一行：
+`serenity::gateway::bridge::shard_runner: Running`。
+
+### 該監控的不是「有沒有在跑」，是「有沒有在講話」
+
+`deploy/watchdog.sh` 看的是 relay 的位元組計數器。relay 只載 gateway 的 websocket，而 Discord
+的心跳大約每 41 秒一次——實測 45 秒內雙向各 409 bytes。連續兩次檢查都沒有增加（約十分鐘），
+就重啟 sandbox agent。
+
+實測方式是 `docker pause oab-sandbox`：容器都還在、隧道還開著，只有心跳停了。watchdog 在第二次
+檢查就動手，45 秒後 bot 重新連上。`learn/dev/06` 用七個情境測判斷邏輯，包含「一次故障只重啟一次」。
+
+### 🔴 修的過程中，安裝腳本自己把 bot 弄停了
+
+`./deploy/install-service.sh` 跑到一半失敗：
+
+```
+Bootstrap failed: 5: Input/output error
+```
+
+原因是 `launchctl bootout` 會在服務真的卸載之前就返回，而對一個還載著的 label 做 bootstrap 會
+失敗。腳本有 `set -e`，於是它**在「把三個 agent 卸載」和「重新載入」之間停住**，bot 就這樣停在那裡。
+
+改成 `reload()`：先等 label 真的消失，再 bootstrap，失敗就重試；watchdog 最後才載，讓失敗時
+留下的東西越多越好。
+
+一般化的教訓：**負責讓服務保持存活的工具，失敗時的預設狀態不該是「什麼都沒有」。**

@@ -17,7 +17,7 @@ the four problems it was probed on.
 
 ## If you have five minutes
 
-1. [docs/findings.md](docs/findings.md) — the nine findings, and the most interesting
+1. [docs/findings.md](docs/findings.md) — the ten findings, and the most interesting
    document here: an existence check that never reads the file, a permission table
    nothing enforces, and a script that reported a week-old number without ever
    erroring. Start here.

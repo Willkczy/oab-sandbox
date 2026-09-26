@@ -513,12 +513,57 @@ machine, counted for `HIER_NONE` across a day.
 
 ---
 
+## 10. Up is not connected, and healthy is not listening
+
+For eight days in September the bot answered nothing, and everything that could
+have said so said the opposite. `docker ps` showed four containers up, the agent
+among them marked healthy. The relay held an open tunnel to Discord, and squid's
+log showed that tunnel being replaced every few hours, which is what a client
+reconnecting on schedule looks like. Meanwhile openab had not written a line
+since 2026-09-18 and had not answered a message since 2026-09-17. One
+`launchctl kickstart -k` brought it back in seconds.
+
+Nothing in the system was watching the only thing that mattered: whether the
+gateway was still carrying anything.
+
+**The log had been lying by omission.** serenity reports a dying shard at WARN,
+and openab's default filter never showed those lines — the same blind spot as
+finding 8, where the failure was only visible with `RUST_LOG=debug`. The
+instrument that would have caught this on the first day had been switched off all
+along. `run.sh` now passes `RUST_LOG=info`, and the first restart after that
+change put `serenity::gateway::bridge::shard_runner: Running` into the log, a
+line this machine had never printed.
+
+**And "is it running" was the wrong question.** `deploy/watchdog.sh` asks whether
+anything is being said. Discord's heartbeat crosses the relay about every 41
+seconds — measured, 409 bytes each way in 45 — and the relay carries the gateway
+websocket and nothing else. Two silent checks in a row, about ten minutes, and it
+restarts the sandbox agent.
+
+Measured on 2026-09-26 by freezing the agent with `docker pause`, which leaves
+every container up and the tunnel open while the heartbeats stop: the watchdog
+restarted it on its second check, and the bot was connected again 45 seconds
+later. `learn/dev/06` drives the decision itself, including that one outage
+produces one restart rather than a restart on every run afterwards.
+
+The installer earned a fix on the way. `launchctl bootout` returns before the job
+is gone, and bootstrapping a label that is still loaded fails with `Bootstrap
+failed: 5: Input/output error`. Under `set -e` that ended the script between
+unloading the agents and loading them again, so for a few minutes the tool meant
+to keep the bot up was the thing keeping it down.
+
+---
+
 ## Still open
 
 - **A crash takes the session log with it.** `stop.sh` archives the log before
   removing the container, which covers an ordinary stop. A container that dies on
   its own — OOM, a panic — is already gone under `--rm` by the time `stop.sh`
   would run, and that is exactly when the log would have been worth the most.
+- **Why the gateway session dies at all.** Finding 10's watchdog restarts a deaf
+  bot within ten minutes, which treats the symptom. What kills the session after
+  a reconnect is still unknown, and `RUST_LOG=info` is the instrument that should
+  catch it the next time it happens.
 - **Why the gate's lookups fail at all.** Finding 9 explains the length of each
   outage and not its cause. The `watch` arm of `learn/14` has since run for half an
   hour on each machine and found nothing, which is what a null result against a

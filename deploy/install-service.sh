@@ -25,7 +25,9 @@ AGENTS="$HOME/Library/LaunchAgents"
 DOMAIN="gui/$(id -u)"
 COLIMA_LABEL=dev.oab.colima
 SANDBOX_LABEL=dev.oab.sandbox
+WATCHDOG_LABEL=dev.oab.watchdog
 LOGS="$HOME/Library/Logs"
+WATCHDOG_INTERVAL="${OAB_WATCHDOG_INTERVAL:-300}"
 
 COLIMA_CPU="${OAB_COLIMA_CPU:-2}"
 COLIMA_MEMORY="${OAB_COLIMA_MEMORY:-4}"
@@ -35,11 +37,39 @@ boot_out() {   # a label that is not loaded is not an error here
     launchctl bootout "$DOMAIN/$1" 2>/dev/null || true
 }
 
+# Replace a running agent with the plist just written.
+#
+# `launchctl bootout` returns before the job is gone, and bootstrapping a label
+# that is still loaded fails with `Bootstrap failed: 5: Input/output error`. On
+# 2026-09-26 that killed this script between booting the agents out and
+# bootstrapping them again, and left the bot down until someone noticed. So wait
+# for the label to disappear, and let the bootstrap retry while the previous
+# container is still shutting down.
+reload() {   # reload <label> <plist>
+    launchctl bootout "$DOMAIN/$1" 2>/dev/null || true
+    i=0
+    while launchctl print "$DOMAIN/$1" >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    i=0
+    until launchctl bootstrap "$DOMAIN" "$2" 2>/dev/null; do
+        i=$((i + 1))
+        if [ "$i" -ge 10 ]; then
+            echo "could not bootstrap $1; run: launchctl bootstrap $DOMAIN $2" >&2
+            return 1
+        fi
+        sleep 2
+    done
+    echo "  loaded $1"
+}
+
 if [ "${1:-}" = "--remove" ]; then
+    boot_out "$WATCHDOG_LABEL"
     boot_out "$SANDBOX_LABEL"
     boot_out "$COLIMA_LABEL"
-    rm -f "$AGENTS/$SANDBOX_LABEL.plist" "$AGENTS/$COLIMA_LABEL.plist"
-    echo "removed both agents; containers already running are left alone"
+    rm -f "$AGENTS/$WATCHDOG_LABEL.plist" "$AGENTS/$SANDBOX_LABEL.plist" "$AGENTS/$COLIMA_LABEL.plist"
+    echo "removed all three agents; containers already running are left alone"
     exit 0
 fi
 
@@ -104,17 +134,46 @@ cat > "$AGENTS/$SANDBOX_LABEL.plist" <<PLIST
 </plist>
 PLIST
 
-boot_out "$SANDBOX_LABEL"
-boot_out "$COLIMA_LABEL"
-launchctl bootstrap "$DOMAIN" "$AGENTS/$COLIMA_LABEL.plist"
-launchctl bootstrap "$DOMAIN" "$AGENTS/$SANDBOX_LABEL.plist"
+cat > "$AGENTS/$WATCHDOG_LABEL.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$WATCHDOG_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>$SANDBOX/deploy/watchdog.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>$SANDBOX</string>
+  <key>RunAtLoad</key><true/>
+  <!-- Not KeepAlive: this is one check, on a timer, not a process to keep up. -->
+  <key>StartInterval</key><integer>$WATCHDOG_INTERVAL</integer>
+  <key>StandardOutPath</key><string>$LOGS/$WATCHDOG_LABEL.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/$WATCHDOG_LABEL.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>$HOME</string>
+    <key>PATH</key><string>$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
+PLIST
+
+# The sandbox is reloaded last of the two that matter, and the watchdog after it,
+# so a failure here leaves as much running as possible rather than as little.
+reload "$COLIMA_LABEL" "$AGENTS/$COLIMA_LABEL.plist"
+reload "$SANDBOX_LABEL" "$AGENTS/$SANDBOX_LABEL.plist"
+reload "$WATCHDOG_LABEL" "$AGENTS/$WATCHDOG_LABEL.plist"
 
 echo "installed:"
 echo "  $AGENTS/$COLIMA_LABEL.plist"
 echo "  $AGENTS/$SANDBOX_LABEL.plist"
+echo "  $AGENTS/$WATCHDOG_LABEL.plist  (every ${WATCHDOG_INTERVAL}s)"
 echo "logs:"
 echo "  $LOGS/$COLIMA_LABEL.log"
 echo "  $LOGS/$SANDBOX_LABEL.log"
+echo "  $LOGS/$WATCHDOG_LABEL.log"
 echo
 echo "state:"
 launchctl print "$DOMAIN/$SANDBOX_LABEL" 2>/dev/null | grep -E "state|pid|last exit" | head -3 || true

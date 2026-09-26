@@ -87,3 +87,9 @@ read first.
 | Script | What it accepted | Written up in |
 |---|---|---|
 | `dev/05-vault-sync.sh` | `vault-sync.sh` syncing both ways, and refusing a dirty pull, an unreviewed or non-fast-forward `back`, and a parent repository mistaken for the vault | findings #7 |
+
+### development ⑤ — noticing a bot that stopped listening
+
+| Script | What it accepted | Written up in |
+|---|---|---|
+| `dev/06-gateway-watchdog.sh` | the watchdog waiting through one silent check, acting on the second, and not acting again for the same outage | findings #10 |
