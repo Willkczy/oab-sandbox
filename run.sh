@@ -154,6 +154,12 @@ fi
 #                   gate -- see the comments in pi-coach for why.
 #   vault           a separate clone, and the only writable host path
 #
+# RUST_LOG is set because its default hides the failures that matter. serenity
+# logs a dying shard at WARN, and at openab's default level that line never
+# appears: on 2026-09-26 the bot had been deaf for eight days with an empty log
+# and four healthy containers. `info` keeps openab's own lines and adds the
+# library's. Set OAB_RUST_LOG=debug when chasing something specific.
+#
 # The proxy variables here are openab's own, for its REST half. The copy in
 # config.toml's [agent] env is pi's: openab clears the environment of the agent
 # subprocess, so neither copy reaches the other process (finding 8, layer 1).
@@ -171,6 +177,7 @@ exec docker run --rm --name oab-sandbox \
     --pids-limit 256 \
     --memory 2g --memory-swap 2g \
     -e DISCORD_BOT_TOKEN \
+    -e RUST_LOG="${OAB_RUST_LOG:-info}" \
     -e HTTPS_PROXY=http://oab-proxy:3128 \
     -e HTTP_PROXY=http://oab-proxy:3128 \
     -e NO_PROXY=localhost,127.0.0.1,oab-proxy,oab-broker \
