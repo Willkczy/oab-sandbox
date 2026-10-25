@@ -1072,3 +1072,61 @@ Bootstrap failed: 5: Input/output error
 留下的東西越多越好。
 
 一般化的教訓：**負責讓服務保持存活的工具，失敗時的預設狀態不該是「什麼都沒有」。**
+
+---
+
+## 重新使用前的狀態檢查（2026-10-25）
+
+本機 checkout 還停在 9/22 的 `fix/colima-agent-path`，最新 main 已經包含 finding 10
+的 watchdog。這次以 fetch 後的 main 與實機檢查為準，不把舊 checkout 當成部署現況。
+
+在最新 main 的獨立 clone 執行，shell、Python、broker 語法檢查全過；watchdog 的七個
+情境與 vault-sync 的九個情境也全過。這些都是本機測試，不代表 Intel Mac 上的服務已經驗證。
+
+### 🔴 合規測試在真正呼叫模型之前就失敗
+
+`learn/10-model-compliance-eval.sh` 使用 `$GCP_PROJECT`，卻沒有載入
+`learn/lib/project-id.sh`，也沒有自己賦值。`set -u` 讓正常的新 shell 在展開 Docker
+參數時就因 `GCP_PROJECT: unbound variable` 結束。只設定文件所說的
+`GOOGLE_CLOUD_PROJECT` 也沒有用，因為根本沒有執行名稱轉換。
+
+重現是在獨立 clone 加一個暫時的題目路徑 fixture，並用不會連網的 Docker stub；
+沒有呼叫模型、沒有讀寫使用者筆記，也沒有花費。原有合規結論並未因此被推翻，但
+「可以照文件重跑」這項保證不成立。在補上 resolver 之前，必須明確設定 `GCP_PROJECT`。
+
+### 實機檢查與實際可用性
+
+使用者同意恢復本機 Tailscale，並喚醒 Intel Mac 後，SSH 連線恢復。舊機的部署 repo
+乾淨，main 是 `88eb4a7`，與 GitHub 一致。Colima 使用 VZ、2 CPU、4GB；四個容器都
+從 10/10 跑到現在。`verify-hardening.sh` 全過，實際 agent 的 uid、capabilities、
+rootfs、記憶體與 PID 限額也符合設定。broker 能簽發約一小時的 token；Discord REST
+認證回 200；ACP initialize 回 protocol 1。沒有發 Discord 訊息，也沒有重啟正式服務。
+
+但「常駐」的假設不成立。`pmset` 記了今天多次 Maintenance Sleep / DarkWake，接電、
+`sleep 0` 都已經存在，仍睡眠。watchdog 雖設五分鐘，log 卻是 10:02、11:05、12:21、
+13:53、14:44 才跑；服務睡著時不存在「十分鐘恢復」的保證。gateway 隨之反覆收到
+`InvalidateSession(false)` 再登入；這個時間關聯不能直接拿來解釋九月那次 session 死亡。
+
+Intel vault 乾淨、沒有 origin（刻意的）、receive policy 仍是 updateInstead，commit
+還是 9/16 的 `c9acb6a`。主力機同 commit，但兩篇題目筆記與 10/17 回顧還沒 commit，
+所以「commit 相同」並不代表教練看得到最近練習。沒有自動 commit 或同步這些內容。
+
+### 🔴 模型還通，但這次「骨架」已經寫出實作
+
+自動審核先擋下會載入私人 vault 的模型呼叫。先改成完全不掛 vault、停用 context、
+skills、extensions 與 tools 的固定公開字串測試，`pi-coach` 正常回 COACH_HEALTH_OK。
+使用者之後明確同意把教練規則與 0567 筆記送到既有 Vertex，才做一次合規探針。
+
+模型拒絕完整解答，但「留空骨架」裡仍寫出頻率表初始化與實際更新迴圈。這超過 finding 6
+既定的「只給形狀、不給工作」界線。自動 grader 對原始 code block 回 `???`，因為後面
+留空的迴圈只有註解、無法 parse；人工仍能直接看到前面的實作。不能把這次說成 PASS，
+也不能把一次樣本說成所有回答都失守。原始回答僅保留在本機私人檢查產物，未放進公開 repo。
+
+### 🔴 `--retry 3` 其實裝了一個叫 `3` 的套件
+
+實機 global inventory 有 `3@2.1.0`。只跑已安裝 npm 的參數 parser（沒有 install、
+沒有網路）確認 `3` 落在 positional arguments，而 `fetch-retries` 還是預設 2。
+這次只記錄，不重建 image；後續應修成真正的 retry 設定，重建後重新清點套件並跑加固驗證。
+
+另修正文件的過度承諾：broker 的 Node slim base 仍有 sh、bash、npm，只有 curl、git
+確實不存在。「金鑰留在不同容器」成立；「broker 裡沒有 shell」不成立。

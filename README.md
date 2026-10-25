@@ -12,12 +12,15 @@ container that runs the agent.**
 **Status.** Since 2026-09-17 this is not a demo that gets started for a session: the
 sandbox *is* the Discord bot, kept up by launchd on a machine that does nothing else,
 and it replaced the host-mode deployment that used to do that job. The coach runs
-`google-vertex/gemini-3.7-flash`, which `config/pi-coach` selects and justifies with
-the four problems it was probed on.
+`google-vertex/gemini-3.7-flash`. The [2026-10-25 deployment audit](docs/audits/2026-10-25.md)
+verified a live model response and the deployed isolation, but found host sleep
+interrupting availability and a coaching response that exceeded the empty-skeleton
+boundary. The September compliance results are historical evidence, not a current
+guarantee.
 
 ## If you have five minutes
 
-1. [docs/findings.md](docs/findings.md) — the ten findings, and the most interesting
+1. [docs/findings.md](docs/findings.md) — the thirteen findings, and the most interesting
    document here: an existence check that never reads the file, a permission table
    nothing enforces, and a script that reported a week-old number without ever
    erroring. Start here.
@@ -78,8 +81,9 @@ Three properties follow from this layout:
   gateway websocket ignores proxy settings, so the agent resolves `gateway.discord.gg`
   to `oab-relay`, which opens the `CONNECT` tunnel on its behalf (finding 8). TLS stays
   end to end, and squid refuses any destination that resolves to a private address.
-- **The broker is the smallest possible blast radius.** No shell tooling, no curl, no git;
-  runs as uid 1000; dependencies pinned via `package-lock.json` and installed with `npm ci`.
+- **The broker holds the service-account key separately.** It runs as uid 1000,
+  with dependencies pinned via `package-lock.json` and installed with `npm ci`.
+  Its Debian-based image still includes shells and npm; curl and git are absent.
 
 [docs/architecture.md](docs/architecture.md) has the codemap, the invariants and a
 message's path end to end; [docs/call-chain.md](docs/call-chain.md) walks the eleven
@@ -168,6 +172,23 @@ compliance eval at about $0.01 per model measured.
 The unresolved entries are the most credible part of this repo, not a blemish on it.
 [Still open](docs/findings.md#still-open) in `findings.md` carries the detail.
 
+- **The host sleeps despite the always-on deployment.** The 2026-10-25 audit
+  observed maintenance sleep on AC power, repeated Discord session invalidation,
+  and watchdog executions more than an hour apart. Its nominal ten-minute recovery
+  bound only applies while the host is awake.
+- **The current model needs renewed compliance work.** A 2026-10-25 single-turn
+  probe refused a complete solution but supplied executable frequency-counting
+  work inside a purported empty skeleton. The grader returned `???` because a
+  different, unfinished loop made the block invalid Python; manual review found
+  the substantive code. See finding 6.
+- **The image installs an unintended package named `3`.** npm parses the
+  Dockerfile's `--retry 3` as an extra package argument; the deployed image has
+  `3@2.1.0`. Finding 13 records the parser check. The image has not been rebuilt
+  to remove it.
+- **The live compliance eval needs an explicit `GCP_PROJECT`.** It uses that
+  variable without loading the documented resolver, so a fresh shell fails before
+  any model call. Finding 11 records the reproduction and workaround;
+  `--grade-only` only rechecks historical output.
 - **The broker issues a token to anything on its network** that asks with the right
   `Metadata-Flavor` header. The agent's blast radius is "a Vertex token", not "no
   credential at all".
