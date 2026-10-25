@@ -1156,3 +1156,38 @@ namespace，普通 NetworkPolicy 不能按同 Pod 內的容器分別放行外連
 沿用官方升級流程，再規劃不會睡眠的 Linux 主機與 K3s／Helm。這次沒有安裝或遷移。
 另記官方 10/23 beta 的 Node 安全重建資訊；不能只看 API 的 prerelease=false 就把
 名稱仍帶 beta 的 release 當 stable，也不能僅因有新版 beta 就說 0.9 minor 不受支援。
+
+---
+
+## 個人 Google 訂閱、Vertex 與 ACP 的來源核對（2026-10-25）
+
+使用者接續 deployment audit，詢問自己的 Google AI Pro 能否用於教練，以及 ACP
+是否已支援。先讀同日 audit、wrapper、config、broker 與歷史紀錄：現役一直是
+OpenAB → pi-acp → pi-coach → Pi → Vertex，ACP 不是尚待加入的功能。
+
+### 🔴 登入文件仍可能描述已停止的個人服務
+
+Google 6/18 公告與 10/9 更新的 deprecation 文件確認個人 Gemini CLI 訂閱路徑
+已停止，導向 Antigravity；Pi v0.71.0 也已移除 Google 訂閱 providers。
+不能依舊 README 中的 OAuth 範例說現役 Pi 只要 /login 就能改扣 Pro 額度。
+
+### ✅ 官方 ACP server 已存在，但不是 OpenAB 的 wrapper
+
+核對 registry 10/23 的 `06229c6`：Google 發行 Antigravity ACP server 1.4.3，
+包含 Linux x86_64。OpenAB main `20830d5` 另有 `agy-acp → agy -p`；其 guide
+仍說無 streaming、cancel 無效，但 main.rs 已輪詢 delta 並在取消時 kill child。
+沒有執行新 server，也沒有把來源檢查寫成我們的部署已可用。
+
+Google 目前 model table 也不再把現役 3.7 Flash 列為個人 Pro entitlement。
+換 backend 會一起改動模型與 harness，教練規則、session、工具與 OAuth 儲存都要重驗。
+v0.9.0 的 ACP client 會自選較寬鬆的 permission option，不能當人工批准閘門。
+
+### 可先省費用，而不先換掉 broker
+
+Developer Program 現行方案表列 Pro 每月 $10 GenAI / Cloud credit，官方 benefit
+說明含 Vertex。先確認帳號資格、redeem 到現役 project 的 billing account，可能就能
+抵用既有用量；這不等於 API 無限量，也不代表帳號已啟用。這次沒有讀 billing、
+沒有登入 Google、沒有呼叫模型或變更 Intel 部署。
+
+整理成英文 `docs/gemini-subscriptions-and-acp.md` 與 finding 15，保留官方來源、
+過去為可用性與隔離各自多加的設定，以及遷移前還要取得哪些實測證據。

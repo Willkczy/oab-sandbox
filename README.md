@@ -20,7 +20,7 @@ guarantee.
 
 ## If you have five minutes
 
-1. [docs/findings.md](docs/findings.md) — the fourteen findings, and the most interesting
+1. [docs/findings.md](docs/findings.md) — the fifteen findings, and the most interesting
    document here: an existence check that never reads the file, a permission table
    nothing enforces, and a script that reported a week-old number without ever
    erroring. Start here.
@@ -147,6 +147,11 @@ Upstream designs for sandboxed use and primarily documents Kubernetes.
 [Docker versus Kubernetes](docs/deployment-options.md) compares its actual Helm
 defaults with the controls implemented here and what a migration must preserve.
 
+[Google subscriptions and ACP](docs/gemini-subscriptions-and-acp.md) separates
+the current Pi/Vertex path from personal Google AI Pro benefits, Google's official
+Antigravity ACP server, and OpenAB's different CLI adapter. It also records why
+the older Gemini CLI subscription-login instructions no longer apply.
+
 ## Repository map
 
 | Path | What it is |
@@ -212,6 +217,11 @@ The unresolved entries are the most credible part of this repo, not a blemish on
 - **`config/pi-coach` rests on implementation details** in pi and google-auth-library:
   `os.homedir()` falling back to `/etc/passwd` while the other reads `HOME` directly.
   Re-verify authentication after either dependency changes.
+- **Personal Google subscription backends have not been validated here.** ACP
+  is already in use, but replacing Pi/Vertex with Antigravity changes model
+  entitlement, OAuth storage, session handling and the credential boundary.
+  Finding 15 and the [source review](docs/gemini-subscriptions-and-acp.md) explain
+  the available paths and the measurements still needed.
 
 ## Related work
 
