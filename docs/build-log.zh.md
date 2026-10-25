@@ -1130,3 +1130,29 @@ skills、extensions 與 tools 的固定公開字串測試，`pi-coach` 正常回
 
 另修正文件的過度承諾：broker 的 Node slim base 仍有 sh、bash、npm，只有 curl、git
 確實不存在。「金鑰留在不同容器」成立；「broker 裡沒有 shell」不成立。
+
+---
+
+## 官方推薦 Kubernetes，與現有 Docker 隔離的差別（2026-10-25）
+
+使用者帶來社群開發者建議：應安裝在 K8s，不建議一般 Docker。查官方 main
+`20830d5` 的 DESIGN、local-dev、README、Helm values 與 Deployment template。
+明文是正式使用必須 sandbox，設計以 Pod 隔離為前提；裸跑 host 只供開發除錯。
+README 也提供 ECS Fargate，因此不能把這些文字讀成唯一合法平台是 Kubernetes。
+沒有取得社群發言的完整原文，未把我的解讀當成開發者原意。
+
+### 🔴 chart 的存在不等於政策已經完整
+
+官方 Helm 預設有 non-root、read-only rootfs、drop capabilities、禁止提權與 seccomp，
+但 agent 的 resources 還是空的、沒有 NetworkPolicy template、Deployment 沒有 probes，
+而且固定一個 replica、Recreate。這些仍由部署者補上；K8s 名稱本身不會補完。
+
+現有 coach 是 macOS → Colima Linux VM → Docker Engine → 四容器，由 launchd 監督。
+它不是 K8s 管理的 workload；但已手動量測多項相同的隔離措施。搬遷要保留 broker
+私鑰隔離與 Squid 閘門，不能把四個容器全放進同一個 Pod 就當等價，因為 Pod 共享網路
+namespace，普通 NetworkPolicy 不能按同 Pod 內的容器分別放行外連。
+
+整理成英文 `docs/deployment-options.md`。短期先修實測缺口；若要長期多 bot 常駐、
+沿用官方升級流程，再規劃不會睡眠的 Linux 主機與 K3s／Helm。這次沒有安裝或遷移。
+另記官方 10/23 beta 的 Node 安全重建資訊；不能只看 API 的 prerelease=false 就把
+名稱仍帶 beta 的 release 當 stable，也不能僅因有新版 beta 就說 0.9 minor 不受支援。

@@ -653,6 +653,32 @@ a shell is not one this image provides.
 
 ---
 
+## 14. A platform name is not an isolation policy
+
+The operator brought an upstream community recommendation to use Kubernetes
+rather than ordinary Docker. Reading the official design and chart on
+2026-10-25 exposed two different questions: which environment upstream intends,
+and which restrictions a deployed environment actually enforces.
+
+Upstream requires sandboxed use outside local development and designs around
+Pod isolation. Its current Helm defaults set several container restrictions,
+but leave agent resources empty, provide no NetworkPolicy template, and define
+no application probes in the main Deployment. That Deployment is a single
+replica with Recreate, not a ready-made high-availability setup.
+
+This deployment uses Docker explicitly, with custom controls measured in the
+audit. Moving the existing roles into one Pod would not preserve their network
+boundaries: containers in a Pod share a network namespace. A migration must
+preserve the broker and egress boundaries deliberately. It also would not wake
+the physical host.
+
+The result is a [source-linked comparison](deployment-options.md), with the
+upstream revision pinned and deployment changes left to a separate tested plan.
+The custom implementation is not an upstream endorsement or a substitute for
+maintaining its own controls.
+
+---
+
 ## Still open
 
 - **Host sleep defeats continuous availability.** Finding 12 observed the

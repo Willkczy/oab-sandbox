@@ -20,7 +20,7 @@ guarantee.
 
 ## If you have five minutes
 
-1. [docs/findings.md](docs/findings.md) — the thirteen findings, and the most interesting
+1. [docs/findings.md](docs/findings.md) — the fourteen findings, and the most interesting
    document here: an existence check that never reads the file, a permission table
    nothing enforces, and a script that reported a week-old number without ever
    erroring. Start here.
@@ -142,6 +142,10 @@ Started this way, the sandbox lasts as long as your session. The machine that ho
 permanently does not start it by hand at all: `deploy/install-service.sh` puts it under
 launchd. Both cases, and what each script refuses to do quietly, are in
 [docs/operations.md](docs/operations.md).
+
+Upstream designs for sandboxed use and primarily documents Kubernetes.
+[Docker versus Kubernetes](docs/deployment-options.md) compares its actual Helm
+defaults with the controls implemented here and what a migration must preserve.
 
 ## Repository map
 
