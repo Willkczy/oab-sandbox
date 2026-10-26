@@ -1191,3 +1191,18 @@ Developer Program 現行方案表列 Pro 每月 $10 GenAI / Cloud credit，官�
 
 整理成英文 `docs/gemini-subscriptions-and-acp.md` 與 finding 15，保留官方來源、
 過去為可用性與隔離各自多加的設定，以及遷移前還要取得哪些實測證據。
+
+### 🔴 後續：帳務 IAM 已授權，福利頁仍漏列教育帳戶（2026-10-25）
+
+使用者更正 Pro 所屬帳號，並自行授予該個人帳號 Billing Account User。
+以唯讀 gcloud 查到直接的 `roles/billing.user` binding，沒有 condition；瀏覽器的
+福利頁也確認登入正確個人帳號。使用者提供的 Cloud Console 可見教育帳戶，但回報
+重試後福利下拉仍只有另一個帳戶。沒有把這個差異直接斷言成教育帳戶禁止兌換。
+
+公開 FAQ 指向 `billing.accounts.redeemPromotion`，該角色確實包含此 permission，
+卻沒有說明目前差異。教育 credit 文件也不能證明此帳戶可接受個人 Pro promotion。
+先前「加好權限即可選取」的操作路徑只能作為嘗試，不是已證實的方案。
+
+整理私人支援信草稿，請 Google 查帳戶類型、promotion eligibility 與列表條件；
+email、billing ID、課程 credit 餘額與草稿都留在版本控制外。沒有繼續提高權限、
+替使用者兌換 credit 或改 project billing；現役部署維持原樣。

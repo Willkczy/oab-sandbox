@@ -704,6 +704,13 @@ quota is the objective. Protocol compatibility cannot establish account
 eligibility, preserve the same model, or keep long-lived credentials outside the
 tool-running container. This research changed no runtime configuration.
 
+A same-day follow-up verified a direct, unconditional billing-user role for the
+subscribed personal account, yet the operator still could not select the
+education billing account in the benefit dropdown. Cloud Console visibility and
+documented IAM permissions do not establish promotion eligibility or correct
+listing by the benefits service. The source review records that unresolved
+mismatch; no broader role grant or billing migration was used as a workaround.
+
 ---
 
 ## Still open
@@ -711,7 +718,8 @@ tool-running container. This research changed no runtime configuration.
 - **Subscription-backed coaching remains unmeasured.** Finding 15 distinguishes
   the official ACP server from the CLI wrapper and records the required
   authentication, model, permission, session and isolation checks. Cloud-credit
-  eligibility and redemption were not inspected.
+  eligibility and redemption remain unconfirmed after the omitted-account
+  follow-up, despite a verified billing-user role.
 
 - **Host sleep defeats continuous availability.** Finding 12 observed the
   difference between a five-minute timer and its actual wall-clock execution.

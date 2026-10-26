@@ -221,7 +221,9 @@ The unresolved entries are the most credible part of this repo, not a blemish on
   is already in use, but replacing Pi/Vertex with Antigravity changes model
   entitlement, OAuth storage, session handling and the credential boundary.
   Finding 15 and the [source review](docs/gemini-subscriptions-and-acp.md) explain
-  the available paths and the measurements still needed.
+  the available paths and the measurements still needed. Cloud-credit redemption
+  also remains unresolved: the benefits list omitted the education billing
+  account despite a verified billing-user role.
 
 ## Related work
 

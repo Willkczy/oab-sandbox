@@ -283,3 +283,28 @@ Before replacing the deployed backend, collect these distinct pieces of evidence
 This review completes the source assessment. Subscription eligibility, billing
 redemption, direct OpenAB integration and the new runtime's isolation remain
 unmeasured; the deployed Pi/Vertex configuration has not been changed.
+
+## Follow-up: the credit redemption account list remains unresolved
+
+Later on 2026-10-25, the operator granted the subscribed personal account
+`roles/billing.user` on the existing education billing account. A read-only IAM
+query confirmed that direct binding without a condition, and the live benefits
+page showed the intended personal account signed in. The operator could see the
+education billing account in Cloud Console, but reported that the benefits
+dropdown still offered only a different account after retrying.
+
+The [billing role definition](https://docs.cloud.google.com/billing/docs/how-to/billing-access)
+includes `billing.accounts.redeemPromotion`, the permission named in the
+[benefits FAQ](https://developers.google.com/profile/help/benefits). The published
+FAQ does not explain this observed mismatch. The reviewed education-credit
+documentation also does not establish whether this particular account accepts
+the Pro promotion. Neither an eligibility rejection nor a benefits-list defect
+has been confirmed. A role binding is not proof that every policy and product
+eligibility check passes.
+
+Do not present the Cloud-credit route as a completed cost reduction, repeatedly
+increase access, or move a project to a different billing account to bypass an
+unexplained dropdown. A private support-request draft asks the Developer Program
+team to confirm the account type, eligibility and listing prerequisites; account
+identifiers and the draft remain outside version control. No credit redemption,
+billing reassignment or deployment change was performed by the agent.
