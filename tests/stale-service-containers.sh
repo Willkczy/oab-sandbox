@@ -30,17 +30,17 @@
 # this change does to a sandbox that an older run.sh started.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/dev/03-stale-service-containers.sh
+#   ./tests/stale-service-containers.sh
 #
 # Costs nothing. Needs Docker and alpine:3.24, which it pulls if absent. The
-# container is named oab-d03-svc and removed on exit.
+# container is named oab-staletest-svc and removed on exit.
 
 set -eu
 
-SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-NAME=oab-d03-svc
+SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NAME=oab-staletest-svc
 IMAGE=alpine:3.24
-WORK="$SANDBOX/learn/out/dev03"
+WORK="$SANDBOX/out/stale-service-containers"
 CONF="$WORK/service.conf"
 FAIL=0
 

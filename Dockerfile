@@ -59,7 +59,7 @@ RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
 # Creating the directory here, owned by node, is the whole fix. When Docker mounts
 # an empty named volume over a directory that exists in the image, it copies the
 # directory's ownership onto the volume. On 2026-09-15 that held for a new volume
-# and for an existing, empty, root-owned one alike; learn/dev/04 re-checks both.
+# and for an existing, empty, root-owned one alike; tests/openab-state-volume.sh re-checks both.
 # A volume that already holds files keeps its ownership, but openab could never
 # have written to this one. ~/.pi never had the problem, because the base image
 # already ships it owned by node.

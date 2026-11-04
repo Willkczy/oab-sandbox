@@ -1,12 +1,12 @@
 # The single source for the GCP project id.
 #
-# Why this exists: three scripts under learn/ need to pass GOOGLE_CLOUD_PROJECT
+# Why this exists: the scripts that make a real Vertex call need to pass GOOGLE_CLOUD_PROJECT
 # to docker, and each used to hardcode the same string. config/config.toml
 # already holds that value and is gitignored, so the real id never reaches a
 # public repository -- reading it from there is enough.
 #
 # Usage: callers have already cd'd to the repo root, so just
-#          . learn/lib/project-id.sh
+#          . lib/project-id.sh
 #        and use $GCP_PROJECT afterwards.
 #
 # The shape it takes in config.toml (a single-line inline table, note the

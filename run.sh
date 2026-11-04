@@ -58,7 +58,7 @@ docker network inspect oab-ext >/dev/null 2>&1 || docker network create oab-ext
 # `docker inspect`, and not even a checksum of a private key belongs there. A
 # rotated key therefore still needs ./stop.sh first.
 #
-# learn/dev/03 runs this function against a throwaway container.
+# tests/stale-service-containers.sh runs this function against a throwaway container.
 #
 # start_service <name> <image> <config file, or -> <docker run arguments...>
 # The arguments must include the image. Returns 0 if it started a container, 1 if

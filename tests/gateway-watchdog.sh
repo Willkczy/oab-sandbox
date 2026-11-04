@@ -27,15 +27,15 @@
 #   7  no relay to read                 says so, exits 0, does not act
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/dev/06-gateway-watchdog.sh
+#   ./tests/gateway-watchdog.sh
 #
-# Costs nothing, needs no containers and no secret. Works in learn/out/dev06.
+# Costs nothing, needs no containers and no secret. Works in out/gateway-watchdog.
 
 set -eu
 
-SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 WATCHDOG="$SANDBOX/deploy/watchdog.sh"
-WORK="$SANDBOX/learn/out/dev06"
+WORK="$SANDBOX/out/gateway-watchdog"
 STATE="$WORK/state"
 ACTED="$WORK/acted"
 FAIL=0

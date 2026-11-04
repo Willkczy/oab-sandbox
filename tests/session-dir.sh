@@ -1,5 +1,5 @@
 #!/bin/sh
-# Experiment: does pi's --session-dir really change where session files land?
+# Test: does pi's --session-dir really change where session files land?
 #
 # What it tests  : with --session-dir set, where the .jsonl ends up and whether
 #                  anything new still appears in the default location
@@ -10,12 +10,12 @@
 # Cost           : makes one real Vertex call (about $0.0001)
 # Prerequisites  : oab-proxy and oab-broker must be running (./run.sh, or start
 #                  them by hand)
-# Re-run         : ./learn/dev/01-session-dir.sh [session dir]
+# Re-run         : ./tests/session-dir.sh [session dir]
 #                  no argument means /tmp/sessions
 
 set -e
-cd "$(dirname "$0")/../.."
-. learn/lib/project-id.sh
+cd "$(dirname "$0")/.."
+. lib/project-id.sh
 SESSION_DIR="${1:-/tmp/sessions}"
 
 docker run --rm --network oab-int \

@@ -60,13 +60,13 @@
 # warns about, which squid.conf's private_dst rule turns into TCP_DENIED.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/13-discord-gateway-proxy.sh
+#   ./checks/discord-gateway-proxy.sh
 #
 # Costs nothing and needs no secret. No Vertex call is made: openab spawns pi
 # only when a conversation starts, and none ever starts here -- which is also
 # why the broker is not needed and /workspace is never mounted.
 #
-# Containers and networks are named oab-t13-*, so this cannot collide with a
+# Containers and networks are named oab-gwcheck-*, so this cannot collide with a
 # real ./run.sh session. It cleans up after itself.
 
 set -eu
@@ -75,13 +75,13 @@ set -eu
 # clone or worktree can run from any directory.
 SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
-PROXY=oab-t13-proxy
-AGENT=oab-t13-agent
-RELAY=oab-t13-relay
-NET_INT=oab-t13-int
-NET_EXT=oab-t13-ext
+PROXY=oab-gwcheck-proxy
+AGENT=oab-gwcheck-agent
+RELAY=oab-gwcheck-relay
+NET_INT=oab-gwcheck-int
+NET_EXT=oab-gwcheck-ext
 LOG=/var/log/squid/access.log
-OUT="$SANDBOX/learn/out/discord-gateway"
+OUT="$SANDBOX/out/discord-gateway"
 
 # ── The verdict for layer 2 ───────────────────────────────────────────
 #
@@ -142,7 +142,7 @@ fi
 # this value is secret. Keeping the halves apart keeps the file pushable.
 TOKEN_ID=$(printf '123456789012345678' | base64)
 TOKEN_TS=GaBcDe
-TOKEN_SIG=$(printf 'oab-sandbox-learn-13-not-a-secret' | base64 | tr -d '=' | cut -c1-27)
+TOKEN_SIG=$(printf 'oab-sandbox-gateway-check-not-a-secret' | base64 | tr -d '=' | cut -c1-27)
 TOKEN="$TOKEN_ID.$TOKEN_TS.$TOKEN_SIG"
 
 cleanup() {

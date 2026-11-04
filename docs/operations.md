@@ -22,14 +22,14 @@ Both run the same `run.sh` with the same flags. The difference is who calls it.
 ## Stopping, and the session log
 
 `stop.sh` copies the agent's session log out of the container before removing
-it, into `learn/out/archive/<timestamp>/` (gitignored).
+it, into `out/archive/<timestamp>/` (gitignored).
 
 pi writes those sessions to a tmpfs, so the agent only ever sees the current
 one — `config/pi-coach` explains why. Archiving keeps the full history without
 giving that property up, because the archive lands on the host, where the agent
 cannot reach it.
 
-**Do not add `learn/` to `run.sh`'s mount list.** That would hand the
+**Do not add `out/` to `run.sh`'s mount list.** That would hand the
 accumulated history straight back to the agent, which is the one thing the tmpfs
 was for.
 

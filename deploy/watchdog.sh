@@ -24,7 +24,7 @@
 # Usage:
 #   ./deploy/watchdog.sh          one check; the LaunchAgent runs it on a timer
 #
-# Overrides, which exist for learn/dev/06:
+# Overrides, which exist for tests/gateway-watchdog.sh:
 #   OAB_WATCHDOG_STATE     where the last counter is remembered
 #   OAB_WATCHDOG_BYTES     a command printing the byte total, instead of the relay
 #   OAB_WATCHDOG_ACTION    what to run on the decision, instead of launchctl

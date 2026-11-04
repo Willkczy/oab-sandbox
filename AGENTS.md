@@ -16,11 +16,11 @@ Two deliberate exceptions, both already in place:
   otherwise.
 - **A handful of strings that must not be translated**, because translating them
   would break or invalidate what they touch:
-  - `learn/05` and `learn/08` reference paths and headings inside `vault/`, which
+  - `checks/tool-boundary.sh` references paths and headings inside `vault/`, which
     is a separate Chinese repository. Translating those patterns means they match
     nothing.
-  - The probe in `learn/10-model-compliance-eval.sh` stays in Chinese because the
-    vault's coaching rules are in Chinese. An English probe would measure
+  - The probe in `eval/compliance.sh` stays in Chinese because the vault's
+    coaching rules are in Chinese. An English probe would measure
     something other than what production actually does.
 
 If you add a string in either category, say why in a comment next to it.
@@ -32,8 +32,8 @@ running things, not by reading diffs:
 
 - `./verify-hardening.sh` after touching `run.sh`, rebuilding an image, or
   upgrading Docker. It asserts the S2 flags actually took effect.
-- Scripts under `learn/` each state what they test and how to re-run them. Some
-  make real Vertex calls; the cost is noted in each header.
+- Scripts under `tests/`, `checks/` and `eval/` each state what they test and how
+  to re-run them. Some make real Vertex calls; the cost is noted in each header.
 - When editing comments or strings at scale, diff the non-comment lines before
   and after. A textual diff can look benign while changing behaviour — adjacent
   quotes in shell concatenate into a single argument, for instance.
@@ -76,7 +76,7 @@ is deliberate.
 
 - shell scripts pass `sh -n`, python files compile
 - `./verify-hardening.sh` if anything under `run.sh` or the images changed
-- the affected `learn/` script actually runs, and its output is what its own
+- the affected test, check or eval actually runs, and its output is what its own
   header claims you should see
 - for anything a reader would clone, check it in a fresh clone. This working copy
   has `vault/`, the built images and `~/.pi`; a reader has none of those, and
