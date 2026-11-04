@@ -42,13 +42,13 @@
 #            on a failure it remembers; with the directive, for about a second.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/14-gate-dns-reliability.sh watch [seconds] [interval]
-#   ./learn/14-gate-dns-reliability.sh outage
+#   ./checks/gate-dns-reliability.sh watch [seconds] [interval]
+#   ./checks/gate-dns-reliability.sh outage
 #
 # `watch` defaults to 120 seconds at 5-second intervals, a smoke test.
 #
 # Costs nothing and needs no secret: each CONNECT is opened and closed without a
-# token, and no Vertex call happens. Containers and networks are named oab-t14-*,
+# token, and no Vertex call happens. Containers and networks are named oab-dnscheck-*,
 # so this cannot collide with a running ./run.sh. It cleans up after itself.
 
 set -eu
@@ -62,11 +62,11 @@ esac
 SECONDS_TOTAL="${2:-120}"
 INTERVAL="${3:-5}"
 
-PROXY=oab-t14-proxy
-SAMPLER=oab-t14-sampler
-FORWARDER=oab-t14-dns
-NET_INT=oab-t14-int
-NET_EXT=oab-t14-ext
+PROXY=oab-dnscheck-proxy
+SAMPLER=oab-dnscheck-sampler
+FORWARDER=oab-dnscheck-dns
+NET_INT=oab-dnscheck-int
+NET_EXT=oab-dnscheck-ext
 # The outage arm needs the resolver's address to be the same before and after it
 # is restarted, so the internal network gets a subnet and the forwarder a fixed
 # address inside it. A reassigned address would look exactly like a failure that
@@ -74,7 +74,7 @@ NET_EXT=oab-t14-ext
 INT_SUBNET=10.77.0.0/24
 DNS_IP=10.77.0.53
 HOST=gateway.discord.gg
-OUT="$SANDBOX/learn/out/gate-dns"
+OUT="$SANDBOX/out/gate-dns"
 
 cleanup() {
     docker rm -f "$SAMPLER" >/dev/null 2>&1 || true
@@ -252,9 +252,9 @@ grep -v -E '^(negative_dns_ttl|positive_dns_ttl|dns_timeout|dns_nameservers)' "$
 #                    2026-09-15: an entry that had expired and could not be
 #                    refreshed.
 # dns_timeout        30 seconds by default, which would swamp a 30-second outage.
-printf '\n# added by learn/14\ndns_nameservers %s\npositive_dns_ttl 5 seconds\ndns_timeout 5 seconds\n' "$DNS_IP" >> "$CONF_A"
+printf '\n# added by checks/gate-dns-reliability.sh\ndns_nameservers %s\npositive_dns_ttl 5 seconds\ndns_timeout 5 seconds\n' "$DNS_IP" >> "$CONF_A"
 cp "$CONF_A" "$CONF_B"
-printf '\n# added by learn/14 to measure what the default costs\nnegative_dns_ttl 1 second\n' >> "$CONF_B"
+printf '\n# added by checks/gate-dns-reliability.sh to measure what the default costs\nnegative_dns_ttl 1 second\n' >> "$CONF_B"
 
 # 1.1.1.1 is the upstream only because the experiment needs one that is not
 # Docker's, so that stopping this container is the whole outage.

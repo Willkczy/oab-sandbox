@@ -30,23 +30,23 @@
 # script at them, and the real vaults are never touched.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/dev/05-vault-sync.sh
+#   ./tests/vault-sync.sh
 #
-# Costs nothing and needs only git. Works in learn/out/dev05, which it recreates.
+# Costs nothing and needs only git. Works in out/vault-sync, which it recreates.
 
 set -eu
 
-SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 SYNC="$SANDBOX/vault-sync.sh"
-WORK="$SANDBOX/learn/out/dev05"
+WORK="$SANDBOX/out/vault-sync"
 MAIN="$WORK/main vault"
 CLONE="$WORK/clone"
 NOTE="題庫/0001 - Two Sum.md"
 FAIL=0
 
 export OAB_SANDBOX_VAULT="$CLONE"
-export GIT_AUTHOR_NAME=dev05 GIT_AUTHOR_EMAIL=dev05@example.invalid
-export GIT_COMMITTER_NAME=dev05 GIT_COMMITTER_EMAIL=dev05@example.invalid
+export GIT_AUTHOR_NAME=vault-sync-test GIT_AUTHOR_EMAIL=vault-sync-test@example.invalid
+export GIT_COMMITTER_NAME=vault-sync-test GIT_COMMITTER_EMAIL=vault-sync-test@example.invalid
 
 rm -rf "$WORK"
 mkdir -p "$MAIN/題庫"
@@ -130,7 +130,7 @@ out=$("$SYNC" back --yes 2>&1)
 [ $? -ne 0 ] && contains "$out" "uncommitted edit"
 check 8 "main vault has edits: refused" $?
 
-# learn/out lives inside this repository, which is exactly the trap: git would
+# out/ lives inside this repository, which is exactly the trap: git would
 # answer for oab-sandbox itself.
 mkdir -p "$WORK/empty vault"
 out=$(OAB_SANDBOX_VAULT="$WORK/empty vault" "$SYNC" remind-start 2>&1)

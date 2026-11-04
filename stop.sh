@@ -7,7 +7,7 @@ set -e
 # Derived from this script's own location rather than hardcoded, so the archive
 # lands next to the copy of the repo being run -- including a worktree.
 SANDBOX="$(cd "$(dirname "$0")" && pwd)"
-ARCHIVE="$SANDBOX/learn/out/archive"
+ARCHIVE="$SANDBOX/out/archive"
 
 # --- Keep the session log before the container takes it with it ---
 #
@@ -17,7 +17,7 @@ ARCHIVE="$SANDBOX/learn/out/archive"
 # That cost is only worth paying because the history can be moved out first. The
 # agent still sees nothing but the current session -- the property tmpfs was
 # chosen for -- while the full record survives on the host, where the agent
-# cannot reach it. What makes that true is that learn/ is absent from run.sh's
+# cannot reach it. What makes that true is that out/ is absent from run.sh's
 # mount list. Mounting it would hand the accumulated history straight back and
 # undo the point of the tmpfs.
 #

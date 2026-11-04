@@ -1,4 +1,4 @@
-# Side track: the Vertex authentication call chain
+# The Vertex authentication call chain
 
 > This document is a **map, not an explanation**. It marks where each step lives
 > without walking through it, so you can open any single step and dig in.
@@ -11,7 +11,7 @@
 > Vertex AI?
 
 The answer has 11 steps, and only step 11 involves the LLM at all. That is the
-chain's real teaching value: it makes the line between *what the model does* and
+reason to map it: it makes the line between *what the model does* and
 *what the harness does* concrete.
 
 ---

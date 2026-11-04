@@ -24,9 +24,9 @@ guarantee.
    document here: an existence check that never reads the file, a permission table
    nothing enforces, and a script that reported a week-old number without ever
    erroring. Start here.
-2. [`learn/10-model-compliance-eval.sh`](learn/10-model-compliance-eval.sh) — the
-   header says why the coaching rule can only be measured, never enforced.
-   [`learn/lib/grade_compliance.py`](learn/lib/grade_compliance.py) says where the
+2. [`eval/compliance.sh`](eval/compliance.sh) — the header says why the coaching
+   rule can only be measured, never enforced.
+   [`eval/grade_compliance.py`](eval/grade_compliance.py) says where the
    line between a hint and a solution is drawn, and why it is not a line count.
 3. [Known gaps](#known-gaps) — what is still open, written down rather than left out.
 
@@ -40,7 +40,7 @@ shells out to — which is why this repo's `Dockerfile` installs the python3 the
 image lacks.
 
 None of those rules has a system layer behind it. A model that ignores them fails
-silently, and looks helpful while doing it, so `learn/10-model-compliance-eval.sh`
+silently, and looks helpful while doing it, so `eval/compliance.sh`
 re-runs after every model change and finding 6 records what it caught: one model that
 handed over a near-complete implementation, and the grading line that separates a hint
 from a solution.
@@ -96,12 +96,12 @@ Every row assumes the agent is already doing the wrong thing.
 | If the agent … | What stops it | How that was checked |
 |---|---|---|
 | reads the cloud credential | it is not there; `oab-broker` holds the key and hands out short-lived tokens | finding 4, `docs/call-chain.md` |
-| reaches a host of its choosing | `--internal` network; squid allows six domain patterns and refuses private addresses | `learn/13`, `learn/14`, squid's `access.log` |
+| reaches a host of its choosing | `--internal` network; squid allows six domain patterns and refuses private addresses | `checks/discord-gateway-proxy.sh`, `checks/gate-dns-reliability.sh`, squid's `access.log` |
 | escalates inside the container | `--cap-drop ALL`, `no-new-privileges`, uid 1000, read-only rootfs, `/tmp` `noexec` | `verify-hardening.sh` |
 | exhausts the host | `--memory 2g`, `--pids-limit 256`, and tighter ceilings for the relay and broker | `verify-hardening.sh` |
-| reads other sessions' logs | sessions live on a tmpfs; the archive lands on the host, where the agent cannot reach it | `learn/dev/01` |
-| writes into the vault you trust | only `vault/` is writable, and `vault-sync.sh back` shows the commits before a fast-forward | `learn/dev/05` |
-| hands the student a full solution | nothing stops it — this one is measured, not enforced | finding 6, `learn/10` |
+| reads other sessions' logs | sessions live on a tmpfs; the archive lands on the host, where the agent cannot reach it | `tests/session-dir.sh` |
+| writes into the vault you trust | only `vault/` is writable, and `vault-sync.sh back` shows the commits before a fast-forward | `tests/vault-sync.sh` |
+| hands the student a full solution | nothing stops it — this one is measured, not enforced | finding 6, `eval/compliance.sh` |
 
 The last row is the honest one: a coaching rule is a property of the model's output,
 and no container flag can hold it.
@@ -161,17 +161,29 @@ the older Gemini CLI subscription-login instructions no longer apply.
 | `broker/`, `relay/`, `proxy/` | The token broker, the Discord gateway relay, and squid's allowlist. |
 | `config/` | The agent config template, the model wrapper `pi-coach`, and `adc-marker.json` — **not a credential**, deliberately invalid JSON that only exists to satisfy pi's `fileExists` gate. |
 | `deploy/` | The LaunchAgents for the machine that hosts this permanently. |
-| `learn/` | Re-runnable experiments, indexed in teaching order by `learn/README.md`. |
+| `tests/`, `checks/`, `eval/` | Acceptance tests for past changes, re-runnable measurements of design claims, and the coaching-compliance eval. [Indexed below](#tests-checks-and-the-eval). |
+| `lib/` | `project-id.sh`, which the scripts that call Vertex use to find the GCP project. |
 | `docs/` | [findings](docs/findings.md), [architecture](docs/architecture.md), [call chain](docs/call-chain.md), [operations](docs/operations.md), and the Chinese build log the findings distil. |
 
-## Experiments
+## Tests, checks and the eval
 
-`learn/` holds small, re-runnable scripts, each opening with what it tests, what you
-should expect to see, what it costs, and how to re-run it. They cover context growth
-across turns, truncation behaviour, the tool boundary, tmpfs versus volume across a
-restart, session directory resolution, why an egress proxy is not a uniform gate and
-how a relay carries a websocket through one, and a cross-model instruction-compliance
-eval. [`learn/README.md`](learn/README.md) indexes them in teaching order.
+Each script opens with what it tests, what you should expect to see, what it costs,
+and how to re-run it, and runs from the repository root. A test accepted one change
+and is read next to the finding that describes it; a check re-measures a claim the
+design rests on; the eval measures the one rule nothing enforces.
+
+| Script | What it accepts or measures | Finding |
+|---|---|---|
+| `tests/session-dir.sh` | `--session-dir` really moves the session files | 3 |
+| `tests/cost-script-fix.sh` | `pi_cost.py` after sessions moved, including the silent wrong answer | 5 |
+| `tests/vault-sync.sh` | `vault-sync.sh` both ways, and every refusal on the `back` path | 7 |
+| `tests/openab-state-volume.sh` | openab's state volume writable by uid 1000, even one Docker created root-owned | 7 |
+| `tests/stale-service-containers.sh` | `run.sh` recreating a service whose image, arguments or config changed | 8 |
+| `tests/gateway-watchdog.sh` | the watchdog acting on the second silent check, and once per outage | 10 |
+| `checks/tool-boundary.sh` | the agent's real tools against the write permissions the vault's rules claim | 3 |
+| `checks/discord-gateway-proxy.sh` | REST obeying the proxy while the websocket ignores it, and the relay that fixes it | 8 |
+| `checks/gate-dns-reliability.sh` | how long the gate refuses after one failed lookup | 9 |
+| `eval/compliance.sh` | whether a model hands over a solution when asked outright | 6, 11 |
 
 Most cost nothing; three make a real Vertex call, two at about $0.0001 and the
 compliance eval at about $0.01 per model measured.

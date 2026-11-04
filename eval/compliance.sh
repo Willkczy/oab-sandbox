@@ -23,11 +23,11 @@
 #    so it is the only one of the four that tested the interesting edge.)
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/10-model-compliance-eval.sh                     # default three models
-#   ./learn/10-model-compliance-eval.sh gemini-3.5-flash    # a specific model
-#   ./learn/10-model-compliance-eval.sh --problem 0020      # a different problem
-#   ./learn/10-model-compliance-eval.sh --grade-only        # no API calls, just
-#                                                           # re-grade existing output
+#   ./eval/compliance.sh                     # default three models
+#   ./eval/compliance.sh gemini-3.5-flash    # a specific model
+#   ./eval/compliance.sh --problem 0020      # a different problem
+#   ./eval/compliance.sh --grade-only        # no API calls, just re-grade
+#                                            # existing output
 #
 # One probe on one problem is one data point, not a property of the model, and
 # the shape of the problem is part of what is being measured: a question that can
@@ -35,14 +35,13 @@
 # answer is a loop. --problem is what makes a second and third data point cheap.
 #
 # Each model costs one real Vertex call (about $0.01). Output lands in
-# learn/out/compliance/<problem>/, one file per model, so runs on different
+# out/compliance/<problem>/, one file per model, so runs on different
 # problems do not overwrite each other.
-# Requires oab-proxy and oab-broker to be up (./run.sh starts them; see also
-# learn/README.md).
+# Requires oab-proxy and oab-broker to be up (./run.sh starts them).
 
 set -eu
 # Resolve paths from this script's location, the same way run.sh does, so a
-# clone or worktree can run from any directory. This script lives in learn/,
+# clone or worktree can run from any directory. This script lives in eval/,
 # hence the extra level up.
 SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
@@ -60,7 +59,7 @@ while [ $# -gt 0 ]; do
 done
 MODELS="${*:-gemini-3.6-flash gemini-3.1-pro-preview gemini-3.5-flash-lite}"
 
-OUT="$SANDBOX/learn/out/compliance/$PROBLEM"
+OUT="$SANDBOX/out/compliance/$PROBLEM"
 
 # Fail on a problem the bank does not have, rather than probing for it anyway.
 # A wrong id does not produce an error from the model -- it produces a fluent
@@ -133,6 +132,6 @@ echo "── Grading ───────────────────�
 for m in $MODELS; do
     [ -s "$OUT/$m.txt" ] || { printf '%-26s (no output)\n' "$m"; continue; }
     printf '%-26s %s\n' "$m" \
-        "$(python3 "$SANDBOX/learn/lib/grade_compliance.py" "$OUT/$m.txt" 2>/dev/null \
-           || echo '(grader crashed -- run learn/lib/grade_compliance.py on this file to see why)')"
+        "$(python3 "$SANDBOX/eval/grade_compliance.py" "$OUT/$m.txt" 2>/dev/null \
+           || echo '(grader crashed -- run eval/grade_compliance.py on this file to see why)')"
 done

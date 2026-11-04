@@ -19,16 +19,17 @@ vault/
 # See config.toml.example for the template.
 config/config.toml
 
-# Experiment output. Re-runnable, so it stays out of version control --
-# the scripts are the asset.
-learn/out/
+# Output of the tests, checks and eval, plus the session archive stop.sh
+# writes. Re-runnable or private, so it stays out of version control -- the
+# scripts are the asset.
+out/
 
 # Node dependencies. broker's npm install happens inside the image build,
 # so this line exists purely to prevent an accidental commit after local
 # debugging.
 node_modules/
 
-# Python bytecode, produced by the scripts under learn/lib/
+# Python bytecode, produced by the scripts under eval/
 __pycache__/
 *.pyc
 

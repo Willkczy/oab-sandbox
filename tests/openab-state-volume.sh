@@ -25,16 +25,16 @@
 #
 # ── How to re-run ─────────────────────────────────────────────────────
 #   docker build -t oab-sandbox:pi .          # the image under test
-#   ./learn/dev/04-openab-state-volume.sh
+#   ./tests/openab-state-volume.sh
 #
-# Costs nothing. The volumes are named oab-d04-* and removed on exit. The real
+# Costs nothing. The volumes are named oab-voltest-* and removed on exit. The real
 # oab-openab-home is never mounted.
 
 set -eu
 
 IMAGE=oab-sandbox:pi
-FRESH=oab-d04-fresh
-STALE=oab-d04-stale
+FRESH=oab-voltest-fresh
+STALE=oab-voltest-stale
 FAIL=0
 
 cleanup() {

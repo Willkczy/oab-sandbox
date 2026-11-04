@@ -1,5 +1,5 @@
 #!/bin/sh
-# Experiment: how far apart are the write permissions AGENTS.md claims and the
+# Check: how far apart are the write permissions AGENTS.md claims and the
 # tools the agent actually holds?
 #
 # What it tests  : the real tool list pi exposes, against the "write permissions"
@@ -9,7 +9,7 @@
 #                  only ever be a convention, never an enforceable boundary
 # Why it matters : a pi upgrade that adds new tools changes the attack surface,
 #                  and this needs revisiting when it does
-# Re-run         : ./learn/08-tool-boundary.sh
+# Re-run         : ./checks/tool-boundary.sh
 
 IMAGE=oab-sandbox:pi
 TOOLS=/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/core/tools

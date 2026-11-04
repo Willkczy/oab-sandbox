@@ -2,8 +2,9 @@
 # shell scripts parse, python compiles, the broker parses.
 #
 # It does not replace the other half. verify-hardening.sh needs Docker and the
-# three built images, and the learn/ scripts need containers or a real Vertex
-# call. Those still run by hand before a merge, as AGENTS.md says.
+# three built images, and the tests/, checks/ and eval/ scripts need containers
+# or a real Vertex call. Those still run by hand before a merge, as AGENTS.md
+# says.
 #
 # The runner's sh is dash, stricter than the bash-as-sh on macOS, so a bashism
 # that works on the machine that wrote it fails here. That is the point.

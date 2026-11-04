@@ -84,7 +84,7 @@ So the goal changed from prevention to blast radius. Session files moved to
 tmpfs, which takes the worst case for an accidental read from roughly 32K tokens
 down to under 2K.
 
-`learn/08-tool-boundary.sh` prints the claimed boundary and the real tool list
+`checks/tool-boundary.sh` prints the claimed boundary and the real tool list
 side by side, because the gap between them is the actual lesson.
 
 ---
@@ -175,7 +175,7 @@ The fix was two things, and only the first is the obvious one:
 A script that silently guesses wrong is worse than one that crashes, and the
 second fix is what converts one into the other.
 
-`learn/dev/02-cost-script-fix.sh` exercises both cases.
+`tests/cost-script-fix.sh` exercises both cases.
 
 ---
 
@@ -197,9 +197,9 @@ require.
 | `gemini-3.7-flash` | holds the rule on all four problems tried (pi 0.84.2, 2026-09-05) — but only one of the four answers contained code at all |
 
 The `flash-lite` row is why the eval exists at all, and why it is re-run after
-every model swap or version bump. `learn/10-model-compliance-eval.sh` is the
-harness; `learn/lib/grade_compliance.py` is the grader, and the judgement it
-encodes is the hard part of the eval.
+every model swap or version bump. `eval/compliance.sh` is the harness;
+`eval/grade_compliance.py` is the grader, and the judgement it encodes is the
+hard part of the eval.
 
 The first grader was a line count, and the calibration set showed that to be a
 guess: the known violation had 12 executable lines, the known pass had 5, and the
@@ -263,7 +263,8 @@ below. No production model setting was changed.
   writable. `~/.openab` did not, so Docker created the mount point as root, and
   openab, running as uid 1000, lost its thread map and reminders at every restart
   while logging only a WARN. Creating the directory in the Dockerfile fixed new
-  volumes and the existing empty one alike; `learn/dev/04` checks both.
+  volumes and the existing empty one alike; `tests/openab-state-volume.sh`
+  checks both.
 - **A `.git` inside iCloud Drive is not a repository on every machine.** The
   vault's copy on the second machine sat at the same commit as the first and was
   missing a tree object: `git fsck` reported a broken link from a tree that was
@@ -279,8 +280,9 @@ below. No production model setting was changed.
   that snapshot. Every check in this repo asks what the agent can reach; none
   asked whether what it reads is current. `vault-sync.sh` now carries notes both
   ways, reviewing the direction the agent's writes travel, and `run.sh` and
-  `stop.sh` report drift. `learn/dev/05` checks it, including the empty `vault/`
-  Docker creates in a fresh clone, which git had mistaken for this repository.
+  `stop.sh` report drift. `tests/vault-sync.sh` checks it, including the empty
+  `vault/` Docker creates in a fresh clone, which git had mistaken for this
+  repository.
 
 ---
 
@@ -311,7 +313,7 @@ Two causes were stacked, and the first hid the second completely:
    which has no proxy support at all: it accepts an already-proxied TCP stream
    or nothing.
 
-`learn/13-discord-gateway-proxy.sh` separates them by running the same container
+`checks/discord-gateway-proxy.sh` separates them by running the same container
 twice, with and without the variables. With them, one process does both of these
 within the same second:
 
@@ -368,8 +370,8 @@ the table above did not predict.
 
 **The allowlist had never been exercised.** `proxy/squid.conf` permitted
 `.discord.com`, but Discord announces its gateway as `wss://gateway.discord.gg`.
-`learn/13` could not have caught that, because the gateway client failed at local
-name resolution and never reached squid. With the relay in place and the old
+`checks/discord-gateway-proxy.sh` could not have caught that, because the
+gateway client failed at local name resolution and never reached squid. With the relay in place and the old
 allowlist, squid answered the gateway `CONNECT` with `TCP_DENIED/403`. The
 allowlist now names `gateway.discord.gg` alone, following the precedent of
 `r.jina.ai`.
@@ -394,7 +396,7 @@ address. squid also gained a `private_dst` rule that refuses any destination
 resolving to a private range. Under that rule the alias setup produces a single
 `TCP_DENIED/403` instead of a loop.
 
-**The invalid token became the proof.** `learn/13` gained a third arm that wires
+**The invalid token became the proof.** The check gained a third arm that wires
 the relay the way `run.sh` does. With the same invalid token, openab's log shows
 the gateway's `Hello`, then:
 
@@ -423,7 +425,9 @@ printed `discord bot running`. The file inside the container was already the new
 one; squid's `cache.log` showed it had been processed exactly once, before the
 branch switch. `run.sh` then reused any service
 that was already running, which is how the stale gate survived. It now recreates
-one whose image, arguments or config changed, and `learn/dev/03` checks that. After `stop.sh` and `run.sh`, a mention in a guild channel
+one whose image, arguments or config changed, and
+`tests/stale-service-containers.sh` checks that. After `stop.sh` and `run.sh`, a
+mention in a guild channel
 was answered in a thread, and each hop appeared where it should:
 
 ```
@@ -487,7 +491,7 @@ about those lines did not fit a network that was merely down. They arrived five
 seconds apart, which is serenity's retry interval, and each took between 0 and 11
 milliseconds. Nothing resolves a name that fast and fails. That is a cache.
 
-`learn/14-gate-dns-reliability.sh` measures it, and its two wrong turns are worth
+`checks/gate-dns-reliability.sh` measures it, and its two wrong turns are worth
 as much as the result:
 
 - **IPv6 was the first suspicion, and it is wrong.** squid opens a DNS socket on
@@ -558,8 +562,8 @@ restarts the sandbox agent.
 Measured on 2026-09-26 by freezing the agent with `docker pause`, which leaves
 every container up and the tunnel open while the heartbeats stop: the watchdog
 restarted it on its second check, and the bot was connected again 45 seconds
-later. `learn/dev/06` drives the decision itself, including that one outage
-produces one restart rather than a restart on every run afterwards.
+later. `tests/gateway-watchdog.sh` drives the decision itself, including that
+one outage produces one restart rather than a restart on every run afterwards.
 
 The installer earned a fix on the way. `launchctl bootout` returns before the job
 is gone, and bootstrapping a label that is still loaded fails with `Bootstrap
@@ -572,8 +576,8 @@ to keep the bot up was the thing keeping it down.
 ## 11. A repeatable eval must get as far as the model
 
 The compliance eval was documented as resolving its project through
-`learn/lib/project-id.sh`, like the other live probes. The 2026-10-25 audit
-found that `learn/10-model-compliance-eval.sh` never sources that helper and
+`lib/project-id.sh`, like the other live probes. The 2026-10-25 audit
+found that `eval/compliance.sh` never sources that helper and
 never assigns `GCP_PROJECT`, although its Docker command expands that variable
 under `set -u`.
 
@@ -590,7 +594,7 @@ with the documented command. Until the script loads its resolver, explicitly
 provide `GCP_PROJECT`, for example:
 
 ```sh
-GCP_PROJECT=your-project-id ./learn/10-model-compliance-eval.sh gemini-3.7-flash
+GCP_PROJECT=your-project-id ./eval/compliance.sh gemini-3.7-flash
 ```
 
 That command makes a real Vertex call. `--grade-only` avoids the call by reading
@@ -741,8 +745,8 @@ mismatch; no broader role grant or billing migration was used as a workaround.
   a reconnect is still unknown, and `RUST_LOG=info` is the instrument that should
   catch it the next time it happens.
 - **Why the gate's lookups fail at all.** Finding 9 explains the length of each
-  outage and not its cause. The `watch` arm of `learn/14` has since run for half an
-  hour on each machine and found nothing, which is what a null result against a
+  outage and not its cause. The `watch` arm of `checks/gate-dns-reliability.sh`
+  has since run for half an hour on each machine and found nothing, which is what a null result against a
   bursty fault looks like. What is left to do is not another window but a count of
   `HIER_NONE` across a day of squid's own `access.log` on the machine that now hosts
   the sandbox.

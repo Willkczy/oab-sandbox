@@ -60,13 +60,13 @@
 # warns about, which squid.conf's private_dst rule turns into TCP_DENIED.
 #
 # ── How to re-run ─────────────────────────────────────────────────────
-#   ./learn/13-discord-gateway-proxy.sh
+#   ./checks/discord-gateway-proxy.sh
 #
 # Costs nothing and needs no secret. No Vertex call is made: openab spawns pi
 # only when a conversation starts, and none ever starts here -- which is also
 # why the broker is not needed and /workspace is never mounted.
 #
-# Containers and networks are named oab-t13-*, so this cannot collide with a
+# Containers and networks are named oab-gwcheck-*, so this cannot collide with a
 # real ./run.sh session. It cleans up after itself.
 
 set -eu
@@ -75,13 +75,13 @@ set -eu
 # clone or worktree can run from any directory.
 SANDBOX="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
-PROXY=oab-t13-proxy
-AGENT=oab-t13-agent
-RELAY=oab-t13-relay
-NET_INT=oab-t13-int
-NET_EXT=oab-t13-ext
+PROXY=oab-gwcheck-proxy
+AGENT=oab-gwcheck-agent
+RELAY=oab-gwcheck-relay
+NET_INT=oab-gwcheck-int
+NET_EXT=oab-gwcheck-ext
 LOG=/var/log/squid/access.log
-OUT="$SANDBOX/learn/out/discord-gateway"
+OUT="$SANDBOX/out/discord-gateway"
 
 # ── The verdict for layer 2 ───────────────────────────────────────────
 #
@@ -105,9 +105,26 @@ classify_layer2() {
     gw_tung="$2"
     gw_dns="$3"
 
-    # TODO(human): print one verdict line -- CONFIRMED / DISPROVEN / UNDECIDABLE
-    # -- and a short reason underneath it.
-    echo "  (undecided -- classify_layer2 is not implemented yet)"
+    # Proof needs both halves of the pairing. Without the REST half there is no
+    # pairing at all, and a gateway failure that is not a lookup is something a
+    # proxy-aware client could produce too, so both of those stay undecided.
+    if [ "$rest_ok" -eq 0 ]; then
+        echo "  UNDECIDABLE -- the REST half never reached the gate in arm B, so"
+        echo "  layer 1 is still masking layer 2."
+    elif [ "$gw_dns" -gt 0 ]; then
+        echo "  CONFIRMED -- REST went through the proxy while the gateway half, in"
+        echo "  the same process, failed $gw_dns time(s) resolving the host itself."
+    elif [ "$gw_tung" -eq 0 ]; then
+        # On --internal the only way out is the proxy, so a gateway half that
+        # never failed must have used it. This is the optimistic verdict, which
+        # is why it asks for the squid line before anyone believes it.
+        echo "  DISPROVEN -- the gateway half never failed, and on an --internal"
+        echo "  network it cannot connect except through the proxy. Find its tunnel"
+        echo "  in squid's log before recording the limitation as gone."
+    else
+        echo "  UNDECIDABLE -- the gateway half failed $gw_tung time(s), never on name"
+        echo "  resolution. A client that honoured the proxy could fail that way too."
+    fi
 }
 
 # ── Preflight ─────────────────────────────────────────────────────────
@@ -142,7 +159,7 @@ fi
 # this value is secret. Keeping the halves apart keeps the file pushable.
 TOKEN_ID=$(printf '123456789012345678' | base64)
 TOKEN_TS=GaBcDe
-TOKEN_SIG=$(printf 'oab-sandbox-learn-13-not-a-secret' | base64 | tr -d '=' | cut -c1-27)
+TOKEN_SIG=$(printf 'oab-sandbox-gateway-check-not-a-secret' | base64 | tr -d '=' | cut -c1-27)
 TOKEN="$TOKEN_ID.$TOKEN_TS.$TOKEN_SIG"
 
 cleanup() {

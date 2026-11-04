@@ -92,7 +92,9 @@ arguments.
 | `config/config.toml.example` | Template for the agent config; the real file is gitignored. |
 | `deploy/` | The LaunchAgents for the machine that hosts this permanently, and the wrapper they run. |
 | `vault-sync.sh` | Moves notes between `vault/` and the main vault, with a review in the direction that needs one. |
-| `learn/` | Re-runnable experiments, indexed in teaching order by `learn/README.md`. |
+| `tests/` | Acceptance tests, each for one past change and named in the finding that describes it. |
+| `checks/` | Re-runnable measurements of the claims the egress gate and the tool boundary rest on. |
+| `eval/` | The coaching-compliance eval and its grader. |
 | `docs/findings.md` | What the plan got wrong, and what measuring it revealed. |
 | `docs/call-chain.md` | The 11 steps between a keyless container and a Vertex call. |
 | `docs/operations.md` | Running it: per session, always-on, and keeping the vault in step. |
@@ -114,16 +116,17 @@ something, and the check is named.
    [still open](findings.md#still-open). Until then the check is reading it.
 2. **The agent container has no route out except through squid.** It sits on
    `--internal`. Anything that needs a new destination needs a line in
-   `proxy/squid.conf`, where it is visible. Checked by: `learn/13`, `learn/14`.
+   `proxy/squid.conf`, where it is visible. Checked by:
+   `checks/discord-gateway-proxy.sh` and `checks/gate-dns-reliability.sh`.
 3. **A session log the agent can read is the current one only.** Sessions live
-   on a tmpfs; the archive lives on the host. Checked by: `learn/dev/01`.
+   on a tmpfs; the archive lives on the host. Checked by: `tests/session-dir.sh`.
 4. **The coaching rules are measured, never assumed.** They have no system layer
-   behind them, so `learn/10-model-compliance-eval.sh` re-runs after every model
-   change. Checked by: finding 6, and `grade_compliance.py` for where the line
+   behind them, so `eval/compliance.sh` re-runs after every model change.
+   Checked by: finding 6, and `grade_compliance.py` for where the line
    between a hint and a solution sits.
 5. **`vault/` is the one host path the agent can write**, and nothing leaves it
    for the main vault without a human looking at the commits. Checked by:
-   `vault-sync.sh back`, `learn/dev/05`.
+   `vault-sync.sh back`, `tests/vault-sync.sh`.
 
 ---
 
