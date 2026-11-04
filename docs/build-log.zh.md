@@ -1206,3 +1206,34 @@ Developer Program 現行方案表列 Pro 每月 $10 GenAI / Cloud credit，官�
 整理私人支援信草稿，請 Google 查帳戶類型、promotion eligibility 與列表條件；
 email、billing ID、課程 credit 餘額與草稿都留在版本控制外。沒有繼續提高權限、
 替使用者兌換 credit 或改 project billing；現役部署維持原樣。
+
+---
+
+## 移除導讀用的 `learn/`（2026-11-04）
+
+`learn/` 原本同時裝兩種東西：導讀時寫的概念示範，以及開發一直在用的驗收測試、
+量測與 eval。依教學順序排的編號與索引，讓每個開發 session 都被拉回導讀的節奏，
+所以把教學那一半移出 repo，另外一半依用途搬家。教學之後改由獨立的 agent 讀 repo 進行。
+
+**刪除**（只在導讀用，沒有 finding 或程式依賴它們）：`learn/05`、`06`、`07`、`11`、`12`、
+`chain-01`、`learn/lib/token_growth.py`、`learn/lib/spawn_demo.py`、`learn/README.md`。
+`main` 的 `88eb4a7` 仍有完整的 `learn/`。
+
+**搬家**（這份紀錄裡較早的條目保留當時的路徑）：
+
+| 舊路徑 | 新路徑 |
+|---|---|
+| `learn/10-model-compliance-eval.sh` | `eval/compliance.sh` |
+| `learn/lib/grade_compliance.py`、`harvest_session.py` | `eval/` |
+| `learn/dev/01`–`06` | `tests/session-dir.sh`、`cost-script-fix.sh`、`stale-service-containers.sh`、`openab-state-volume.sh`、`vault-sync.sh`、`gateway-watchdog.sh` |
+| `learn/08`、`13`、`14` | `checks/tool-boundary.sh`、`discord-gateway-proxy.sh`、`gate-dns-reliability.sh` |
+| `learn/lib/project-id.sh` | `lib/project-id.sh` |
+| `learn/out/` | `out/`（`stop.sh` 的 session 封存改到 `out/archive/`） |
+
+`checks/discord-gateway-proxy.sh` 的 layer 2 判斷原本是留給人寫的 TODO，一直只印
+「undecided」；這次補上。沒有 REST 那一半就不判，gateway 失敗但不是名稱解析也不判，
+只有「REST 走 proxy、同一個 process 的 gateway 自己解析失敗」才算 CONFIRMED。
+
+既有 checkout 在 `git pull` 之後，舊的 `learn/out/` 不會自己搬，要趁 `out/` 還不存在時
+手動 `mv learn/out out`，否則舊的 session 封存會留在原處。`proxy/squid.conf` 只改了註解，
+但它算在 proxy 的指紋裡，下一次 `run.sh` 會重建 `oab-proxy` 一次。
