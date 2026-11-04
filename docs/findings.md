@@ -217,6 +217,21 @@ Three of its four answers were refusals in prose, which the grader passes
 trivially; only the `0567` answer produced code and so actually tested the edge.
 Four samples, one of them informative.
 
+**Rechecked on 2026-10-25, with a different result.** One authorized probe on
+`0567`, using the deployed pi 0.84.2 and the same selected model, refused a full
+solution but supplied executable frequency-counting updates inside the
+initialization loop. It left the sliding-window loop as comments and called the
+result a skeleton. That is beyond this repository's calibration line: the work,
+not only the shape, was provided.
+
+The unmodified grader returned `???`, because the comment-only loop had no
+executable body and the complete block could not parse. Manual review of the
+earlier loop found the violation. This is not a complete working solution, nor
+evidence that every answer leaks; it is evidence that the September PASS cannot
+stand in for present behavior. The probe used a read-only vault, disposable state,
+and read-only tools. It covered one problem and one turn, not the two-turn gap
+below. No production model setting was changed.
+
 ---
 
 ## 7. Small operational surprises worth writing down
@@ -554,7 +569,128 @@ to keep the bot up was the thing keeping it down.
 
 ---
 
+## 11. A repeatable eval must get as far as the model
+
+The compliance eval was documented as resolving its project through
+`learn/lib/project-id.sh`, like the other live probes. The 2026-10-25 audit
+found that `learn/10-model-compliance-eval.sh` never sources that helper and
+never assigns `GCP_PROJECT`, although its Docker command expands that variable
+under `set -u`.
+
+A fresh shell therefore exits with `GCP_PROJECT: unbound variable` before it
+starts Docker. Exporting the documented `GOOGLE_CLOUD_PROJECT` does not help:
+the missing resolver is also what would translate that name. This was reproduced
+against main in an independent clone with a temporary problem-path fixture and
+a Docker stub that cannot reach a runtime. No model call or user note was
+needed to expose the failure.
+
+The previous model observations still describe the transcripts that were
+measured. What failed is the promise that the next operator can reproduce them
+with the documented command. Until the script loads its resolver, explicitly
+provide `GCP_PROJECT`, for example:
+
+```sh
+GCP_PROJECT=your-project-id ./learn/10-model-compliance-eval.sh gemini-3.7-flash
+```
+
+That command makes a real Vertex call. `--grade-only` avoids the call by reading
+old transcripts; it supplies no evidence about the model's current behavior.
+
+---
+
+## 12. A timer on a sleeping host is not a recovery bound
+
+The deployment called itself always-on, and finding 10 gave its watchdog a
+roughly ten-minute recovery time. Both assumed the host stayed awake.
+
+On 2026-10-25 the Intel Mac was unreachable until it was woken. After access was
+restored, all four containers were up and the agent was healthy. Yet `pmset -g
+log` recorded repeated `Maintenance Sleep` and short `DarkWake` periods on AC
+power, including a 905-second sleep ending at 14:38. The watchdog was configured
+for 300 seconds but its own log showed checks at 10:02, 11:05, 12:21, 13:53, and
+14:44, all local time. It cannot repair anything while the VM is suspended.
+After full wake, checks at 14:44, 14:49 and 14:54 were five minutes apart again.
+
+The gateway repeatedly logged `InvalidateSession(false)` and then connected
+again. Its relay counters increased after full wake, Discord REST authentication
+returned 200, and a fixed public-text request through `pi-coach` returned the
+expected model response. This distinguishes a working deployment when awake
+from continuous availability. It does not establish the cause of the older
+gateway failures or test regional resume hosts.
+
+AC `sleep 0` was already configured; its presence was not sufficient evidence.
+The audit did not change power settings. Continuous wakefulness needs to be
+established and measured before the watchdog's interval can be treated as a
+wall-clock promise.
+
+---
+
+## 13. A retry argument became an installed dependency
+
+The image's npm upgrade line was intended to select pi and tolerate transient
+download failures:
+
+```sh
+npm install -g @earendil-works/pi-coding-agent@${PI_VERSION} --retry 3
+```
+
+The deployed image's global package inventory instead included `3@2.1.0`.
+Running npm's installed argument parser, without an install or network request,
+returned positional arguments `install`, the requested pi package, and `3`.
+`fetch-retries` remained 2. The argument was not doing the job the Dockerfile
+assumed it did.
+
+The build should use the actual retry configuration, such as
+`--fetch-retries=3`, and a rebuilt image should be inventoried before deployment.
+The audit did not rebuild or change the running image, and it did not establish
+whether the unintended package has any harmful behavior. The concrete finding
+is an unrequested dependency in the agent's execution environment.
+
+The inventory also corrected a separate overstatement: the broker's slim Node
+base contains `/bin/sh`, `/bin/bash`, and npm, although it lacks curl and git.
+Keeping the private key in a separate container is the boundary; the absence of
+a shell is not one this image provides.
+
+---
+
+## 14. A platform name is not an isolation policy
+
+The operator brought an upstream community recommendation to use Kubernetes
+rather than ordinary Docker. Reading the official design and chart on
+2026-10-25 exposed two different questions: which environment upstream intends,
+and which restrictions a deployed environment actually enforces.
+
+Upstream requires sandboxed use outside local development and designs around
+Pod isolation. Its current Helm defaults set several container restrictions,
+but leave agent resources empty, provide no NetworkPolicy template, and define
+no application probes in the main Deployment. That Deployment is a single
+replica with Recreate, not a ready-made high-availability setup.
+
+This deployment uses Docker explicitly, with custom controls measured in the
+audit. Moving the existing roles into one Pod would not preserve their network
+boundaries: containers in a Pod share a network namespace. A migration must
+preserve the broker and egress boundaries deliberately. It also would not wake
+the physical host.
+
+The result is a [source-linked comparison](deployment-options.md), with the
+upstream revision pinned and deployment changes left to a separate tested plan.
+The custom implementation is not an upstream endorsement or a substitute for
+maintaining its own controls.
+
+---
+
 ## Still open
+
+- **Host sleep defeats continuous availability.** Finding 12 observed the
+  difference between a five-minute timer and its actual wall-clock execution.
+- **The October coaching probe exceeded the empty-skeleton boundary.** Finding
+  6 records the manual review; a refusal sentence alone is not a passing result.
+- **The unintended npm dependency is still in the running image.** Finding 13
+  identifies the argument-parsing cause; the build has not been repaired here.
+
+- **The live compliance eval does not resolve its project.** Finding 11
+  reproduces the failure before Docker starts. An explicit `GCP_PROJECT` is a
+  workaround, not a repaired default command.
 
 - **A crash takes the session log with it.** `stop.sh` archives the log before
   removing the container, which covers an ordinary stop. A container that dies on

@@ -93,8 +93,13 @@ The watchdog exists because staying up is not the same as staying connected.
 Finding 10 is the eight days this cost. It watches the relay's byte counters,
 since the relay carries the gateway websocket and nothing else, and acts after
 two silent checks in a row. Neither plist holds a secret — a LaunchAgent plist is
-world-readable, so the token stays in the environment file. Both log to
+world-readable, so the token stays in the environment file. The agents log to
 `~/Library/Logs/dev.oab.*.log`.
+
+The recovery time assumes an awake host. The 2026-10-25 audit found repeated
+maintenance sleep even on AC power with `sleep 0`, and timer executions more than
+an hour apart. Keep the host awake independently of launchd; a process inside a
+sleeping VM cannot provide continuous service. Finding 12 records the evidence.
 
 Measured on 2026-09-17, on an Intel MacBook Pro with 8GB running Colima:
 `launchctl kickstart -k` on the sandbox agent has the bot connected again within
@@ -140,3 +145,12 @@ to the main vault and point it at the other one over ssh:
 
 A main vault in iCloud Drive should only ever have one machine writing its
 `.git`. Finding 7 records what happened to the copy that had two.
+
+The deployed Intel Mac deliberately has **no `origin` in its vault clone**, to
+avoid the damaged iCloud repository on that machine. The primary machine is the
+hub: review and commit its notes, then push to the Intel clone over SSH; fetch
+changes back with the explicit SSH source above and review before accepting them.
+`vault-sync.sh pull` on the Intel Mac cannot update a clone with no origin.
+Equal commit IDs also omit uncommitted practice notes: the 2026-10-25 audit found
+two edited problem notes and an untracked review on the primary machine that the
+clean Intel clone did not contain.
