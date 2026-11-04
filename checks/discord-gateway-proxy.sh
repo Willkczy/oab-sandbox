@@ -105,9 +105,26 @@ classify_layer2() {
     gw_tung="$2"
     gw_dns="$3"
 
-    # TODO(human): print one verdict line -- CONFIRMED / DISPROVEN / UNDECIDABLE
-    # -- and a short reason underneath it.
-    echo "  (undecided -- classify_layer2 is not implemented yet)"
+    # Proof needs both halves of the pairing. Without the REST half there is no
+    # pairing at all, and a gateway failure that is not a lookup is something a
+    # proxy-aware client could produce too, so both of those stay undecided.
+    if [ "$rest_ok" -eq 0 ]; then
+        echo "  UNDECIDABLE -- the REST half never reached the gate in arm B, so"
+        echo "  layer 1 is still masking layer 2."
+    elif [ "$gw_dns" -gt 0 ]; then
+        echo "  CONFIRMED -- REST went through the proxy while the gateway half, in"
+        echo "  the same process, failed $gw_dns time(s) resolving the host itself."
+    elif [ "$gw_tung" -eq 0 ]; then
+        # On --internal the only way out is the proxy, so a gateway half that
+        # never failed must have used it. This is the optimistic verdict, which
+        # is why it asks for the squid line before anyone believes it.
+        echo "  DISPROVEN -- the gateway half never failed, and on an --internal"
+        echo "  network it cannot connect except through the proxy. Find its tunnel"
+        echo "  in squid's log before recording the limitation as gone."
+    else
+        echo "  UNDECIDABLE -- the gateway half failed $gw_tung time(s), never on name"
+        echo "  resolution. A client that honoured the proxy could fail that way too."
+    fi
 }
 
 # ── Preflight ─────────────────────────────────────────────────────────
