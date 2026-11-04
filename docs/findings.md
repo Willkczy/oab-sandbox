@@ -679,7 +679,47 @@ maintaining its own controls.
 
 ---
 
+## 15. A protocol does not carry a subscription entitlement
+
+The operator asked whether personal Google AI Pro could replace the coach's
+Vertex usage, and whether ACP was supported yet. The starting assumption mixed
+three interfaces: OpenAB's local agent protocol, Google's model APIs, and the
+consumer subscription's authentication and quotas.
+
+The deployed chain already uses ACP through `pi-acp`. The [dated source review](gemini-subscriptions-and-acp.md)
+found that Gemini CLI's native ACP support survives the removal of individual
+subscription access on June 18, 2026. Pi had separately removed its Google
+subscription providers in v0.71.0, before our deployed v0.84.2.
+
+Antigravity offers a consumer path, including Google's official ACP server with
+Linux x86_64 distribution. That server is different from OpenAB's `agy-acp`
+wrapper. Neither has been tested with our hardening, credential boundary or
+coaching rules. The wrapper guide also understates the reviewed source's
+streaming and cancellation behavior; documentation alone is insufficient.
+
+The changed decision is to separate cost reduction from a backend migration:
+first check the subscription's monthly Cloud-credit benefit for existing Vertex
+billing, and prototype personal OAuth only if using the subscription's agent
+quota is the objective. Protocol compatibility cannot establish account
+eligibility, preserve the same model, or keep long-lived credentials outside the
+tool-running container. This research changed no runtime configuration.
+
+A same-day follow-up verified a direct, unconditional billing-user role for the
+subscribed personal account, yet the operator still could not select the
+education billing account in the benefit dropdown. Cloud Console visibility and
+documented IAM permissions do not establish promotion eligibility or correct
+listing by the benefits service. The source review records that unresolved
+mismatch; no broader role grant or billing migration was used as a workaround.
+
+---
+
 ## Still open
+
+- **Subscription-backed coaching remains unmeasured.** Finding 15 distinguishes
+  the official ACP server from the CLI wrapper and records the required
+  authentication, model, permission, session and isolation checks. Cloud-credit
+  eligibility and redemption remain unconfirmed after the omitted-account
+  follow-up, despite a verified billing-user role.
 
 - **Host sleep defeats continuous availability.** Finding 12 observed the
   difference between a five-minute timer and its actual wall-clock execution.
